@@ -12,7 +12,7 @@ model User {
   email              String      @unique
   password           String? // Делаем опциональным для Google OAuth
   name               String?
-  username           String?     @default("пользователь mirchan") 
+  username           String?     @default("пользователь mirchan")
   status             String?     @default("В поисках интересных тем… ")
   avatarUrl          String?
   avatarFrameUrl     String?
@@ -64,7 +64,7 @@ model Account {
 
 model Token {
   id String @id @default(uuid())
-  
+
   email     String
   token     String    @unique
   type      TokenType
