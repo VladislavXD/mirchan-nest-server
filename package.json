@@ -2,6 +2,7 @@
   "name": "nestjs-server",
   "version": "0.0.1",
   "description": "",
+  "type": "commonjs",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
