@@ -1,5 +1,3 @@
-import { createAvatar } from '@dicebear/core';
-import { lorelei } from '@dicebear/collection';
 import sharp from 'sharp';
 
 /**
@@ -9,6 +7,10 @@ import sharp from 'sharp';
  * @returns Buffer с PNG изображением
  */
 export async function generateAvatar(seed: string): Promise<Buffer> {
+  // Динамический импорт ESM-модулей
+  const { createAvatar } = await import('@dicebear/core');
+  const { lorelei } = await import('@dicebear/collection');
+
   const avatar = createAvatar(lorelei, {
     seed,
     size: 128,
