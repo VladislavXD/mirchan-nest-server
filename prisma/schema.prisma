@@ -1,0 +1,399 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String      @id @default(uuid())
+  email              String      @unique
+  password           String? // Делаем опциональным для Google OAuth
+  name               String?
+  username           String?     @default("пользователь mirchan") 
+  status             String?     @default("В поисках интересных тем… ")
+  avatarUrl          String?
+  avatarFrameUrl     String?
+  backgroundUrl      String?
+  usernameFrameUrl   String?
+  dateOfBirth        DateTime?
+  role               UserRole    @default(REGULAR) // "user", "admin"
+  isActive           Boolean     @default(true) // Активность аккаунта 
+  isVerified         Boolean     @default(false) @map("is_verified") // Подтвержден ли email
+  method             AuthMethod
+  isTwoFactorEnabled Boolean     @default(false) @map("is_two_factor_enabled") // Включена ли двухфакторная аутентификация
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+  bio                String?
+  location           String?
+  lastSeen           DateTime? // Время последней активности
+  googleId           String? // Google OAuth ID
+  provider           String? // "local" | "google"
+  post               Post[]
+  likes              Like[]
+  comments           Comment[]
+  followers          Follows[]   @relation("following")
+  following          Follows[]   @relation("follower")
+  modActions         ModAction[] @relation("ModActions")
+  bansMade           Ban[]       @relation("BansMade")
+  accounts           Account[]
+
+  @@map("users")
+}
+
+model Account {
+  id String @id @default(uuid())
+
+  type     String
+  provider String
+
+  refreshToken String? @map("refresh_token")
+  accessToken  String? @map("access_token")
+  expiresAt    Int     @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @map("user_id")
+
+  @@map("accounts")
+}
+
+model Token {
+  id String @id @default(uuid())
+  
+  email     String
+  token     String    @unique
+  type      TokenType
+  expiresIn DateTime  @map("expires_in")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("tokens")
+}
+
+enum TokenType {
+  VERIFICATION
+  TWO_FACTOR
+  PASSWORD_RESET
+}
+
+enum UserRole {
+  REGULAR
+  ADMIN
+}
+
+enum AuthMethod {
+  CREDENTIALS
+  GOOGLE
+  GITHUB
+  YANDEX
+}
+
+model Follows {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model Post {
+  id        String    @id @default(uuid())
+  content   String
+  imageUrl  String? // URL одного изображения из Cloudinary
+  emojiUrls String[] // Массив URL emoji (gif)
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId  String
+  likes     Like[]
+  views     String[]  @default([]) // Массив UUID пользователей, просмотревших пост
+  comments  Comment[]
+  createdAt DateTime  @default(now())
+
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([userId])
+  @@index([postId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([postId])
+}
+
+model Chat {
+  id            String    @id @default(uuid())
+  participants  String[] // Массив UUID участников чата
+  lastMessage   String? // Последнее сообщение для превью
+  lastMessageAt DateTime? // Время последнего сообщения
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  messages      Message[]
+
+  @@index([lastMessageAt])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  content   String
+  senderId  String
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([chatId])
+  @@index([senderId])
+}
+
+// Forum models
+model MediaFile {
+  id           String  @id @default(uuid())
+  url          String // URL файла в Cloudinary
+  publicId     String // Public ID в Cloudinary для удаления
+  name         String? // Оригинальное имя файла
+  size         Int? // Размер файла в байтах
+  type         String // Тип файла: "image" или "video"
+  mimeType     String // MIME тип файла
+  thumbnailUrl String? // URL превью в Cloudinary
+  width        Int? // Ширина изображения/видео
+  height       Int? // Высота изображения/видео
+  duration     Int? // Длительность видео в секундах
+
+  // Связи с постами
+  threadId String?
+  replyId  String?
+
+  createdAt DateTime @default(now())
+
+  thread Thread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  reply  Reply?  @relation(fields: [replyId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([replyId])
+}
+
+model Board {
+  id               String   @id @default(uuid())
+  name             String   @unique // /b/, /g/, /pol/ и т.д.
+  title            String // "Random", "Technology", "Politics"
+  description      String?
+  isNsfw           Boolean  @default(false)
+  maxFileSize      Int      @default(5242880) // 5MB в байтах
+  allowedFileTypes String[] @default(["jpg", "jpeg", "png", "gif", "webp", "webm", "mp4"])
+  postsPerPage     Int      @default(15)
+  threadsPerPage   Int      @default(10)
+  bumpLimit        Int      @default(500) // лимит постов в треде
+  imageLimit       Int      @default(150) // лимит картинок в треде
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  threads Thread[]
+  bans    Ban[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model Thread {
+  id         String  @id @default(uuid())
+  shortId    String  @unique // Короткий уникальный ID поста
+  slug       String? // Человекочитаемый slug для URL
+  boardId    String
+  subject    String? // Тема треда (опциональная)
+  content    String // Содержимое OP поста
+  authorName String? // Анонимное имя (опционально)
+  authorTrip String? // Трипкод для идентификации
+  posterHash String // Хеш IP для идентификации в треде
+
+  // Cloudinary media data (множественные файлы)
+  mediaFiles MediaFile[] // Массив медиафайлов
+
+  // Deprecated single media fields (оставляем для обратной совместимости)
+  imageUrl      String? // URL изображения в Cloudinary
+  imagePublicId String? // Public ID в Cloudinary для удаления
+  imageName     String? // Оригинальное имя файла
+  imageSize     Int? // Размер файла в байтах
+  thumbnailUrl  String? // URL превью в Cloudinary
+
+  isPinned   Boolean @default(false) // Закрепленный тред
+  isLocked   Boolean @default(false) // Заблокированный тред
+  isClosed   Boolean @default(false) // Закрытый тред
+  isArchived Boolean @default(false) // Архивированный
+
+  replyCount    Int @default(0) // Количество ответов
+  imageCount    Int @default(0) // Количество изображений
+  uniquePosters Int @default(1) // Уникальные постеры
+
+  lastBumpAt DateTime @default(now()) // Последний бамп
+  createdAt  DateTime @default(now())
+
+  board      Board       @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  replies    Reply[]
+  threadTags ThreadTag[]
+
+  // Категория (иерархическая структура через Categories)
+  categoryId String?
+  category   Categories? @relation(fields: [categoryId], references: [id])
+
+  @@index([boardId])
+  @@index([shortId])
+  @@index([boardId, lastBumpAt])
+  @@index([isPinned, lastBumpAt])
+  @@index([categoryId])
+}
+
+model Reply {
+  id         String  @id @default(uuid())
+  shortId    String  @unique // Короткий уникальный ID поста
+  threadId   String
+  content    String // Содержимое поста
+  authorName String? // Анонимное имя
+  authorTrip String? // Трипкод
+  posterHash String // Хеш постера в треде
+  postNumber Int // Номер поста в треде (автоинкремент)
+
+  // Cloudinary media data (множественные файлы)
+  mediaFiles MediaFile[] // Массив медиафайлов
+  imageCount Int         @default(0) // Количество медиафайлов
+
+  // Deprecated single media fields (оставляем для обратной совместимости)
+  imageUrl      String? // URL изображения в Cloudinary
+  imagePublicId String? // Public ID в Cloudinary для удаления
+  imageName     String? // Оригинальное имя файла
+  imageSize     Int? // Размер файла
+  thumbnailUrl  String? // URL превью в Cloudinary
+
+  replyTo  String[] @default([]) // Ссылки на shortId постов, на которые отвечает
+  quotedBy String[] @default([]) // Ссылки на shortId постов, которые цитируют этот
+
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, postNumber])
+  @@index([threadId])
+  @@index([shortId])
+  @@index([posterHash])
+}
+
+model ModAction {
+  id          String   @id @default(uuid())
+  moderatorId String
+  action      String // "delete_post", "ban_user", "pin_thread", etc.
+  targetType  String // "thread", "reply", "user"
+  targetId    String
+  reason      String?
+  duration    Int? // Для банов - в часах
+  createdAt   DateTime @default(now())
+
+  moderator User @relation("ModActions", fields: [moderatorId], references: [id], onDelete: Cascade)
+
+  @@index([moderatorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+model Ban {
+  id          String    @id @default(uuid())
+  ipHash      String // Хеш IP адреса
+  boardId     String? // null = глобальный бан
+  reason      String
+  moderatorId String
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  board     Board? @relation(fields: [boardId], references: [id], onDelete: SetNull)
+  moderator User   @relation("BansMade", fields: [moderatorId], references: [id], onDelete: Cascade)
+
+  @@index([ipHash])
+  @@index([boardId])
+  @@index([moderatorId])
+  @@index([isActive, expiresAt])
+}
+
+// Forum categories & tags
+model Categories {
+  id          String  @id @default(uuid())
+  name        String
+  slug        String  @unique
+  imageUrl    String?
+  icon        String?
+  color       String?
+  description String?
+
+  // Иерархия категорий
+  parentId String?
+  parent   Categories?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children Categories[] @relation("CategoryHierarchy")
+
+  // Треды внутри категории (категория не содержит борды)
+  threads Thread[]
+  group   String?
+
+  @@index([slug])
+  @@index([parentId])
+}
+
+// Теги с иконками/цветами
+model Tag {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  icon        String?
+  color       String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  // связи
+  threadTags ThreadTag[]
+
+  @@index([slug])
+}
+
+// Удалена связь Борд-Тег: теги существуют только у тредов
+
+// Связующая коллекция: Тред-Тег (many-to-many)
+model ThreadTag {
+  id       String @id @default(uuid())
+  threadId String
+  tagId    String
+
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, tagId])
+  @@index([threadId])
+  @@index([tagId])
+}
