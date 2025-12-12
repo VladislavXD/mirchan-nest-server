@@ -3,7 +3,7 @@ import { AuthMethod } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {hash} from 'argon2'
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { generateAvatar } from 'src/libs/common/utils/generateAvatar';
+import { generateAvatar } from '../libs/common/utils/generateAvatar';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 

@@ -2,7 +2,7 @@ import { ConflictException, Injectable, InternalServerErrorException, NotFoundEx
 import { RegisterDto } from './dto/register.dto';
 import { UserService } from 'src/user/user.service';
 import { AuthMethod, User } from '@prisma/client';
-import { generateAvatar } from 'src/libs/common/utils/generateAvatar';
+import { generateAvatar } from '../libs/common/utils/generateAvatar';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { Request, Response } from 'express';
 import { LoginDto } from './dto/login.dto';
