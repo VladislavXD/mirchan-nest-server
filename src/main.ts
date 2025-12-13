@@ -36,7 +36,7 @@ async function bootstrap() {
 
 	// Получаем SESSION_DOMAIN, если пустой - не устанавливаем (браузер будет использовать текущий origin)
 	const sessionDomain = config.get<string>('SESSION_DOMAIN')
-	
+
 	app.use(
 			session({
 				secret: config.getOrThrow<string>('SESSION_SECRET'),
@@ -74,9 +74,17 @@ async function bootstrap() {
 		// Настройки CORS для приложения
 		origin: config.getOrThrow<string>('ALLOWED_ORIGIN'),
 		credentials: true,
-		exposedHeaders: ['set-cookie']
+		exposedHeaders: ['Set-Cookie']
 	})
+
+	// Для Vercel serverless
+	if (process.env.VERCEL) {
+		const expressApp = app.getHttpAdapter().getInstance()
+		module.exports = expressApp
+		return
+	}
 
 	await app.listen(config.getOrThrow<number>('APPLICATION_PORT'))
 }
-bootstrap()
+
+module.exports = bootstrap
