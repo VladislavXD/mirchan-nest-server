@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common'
 import { TokenType } from '@prisma/client'
 
-import { MailService } from 'src/libs/mail/mail.service'
+import { MailService } from '../../libs/mail/mail.service'
 import { PrismaService } from 'src/prisma/prisma.service'
 
 /**

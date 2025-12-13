@@ -6,7 +6,7 @@ import {
 	Validate
 } from 'class-validator'
 
-import { IsPasswordsMatchingConstraint } from 'src/libs/common/decorators/is-passwords-matching-constraint.decorator'
+import { IsPasswordsMatchingConstraint } from '../../libs/common/decorators/is-passwords-matching-constraint.decorator'
 /**
  * DTO для регистрации пользователя.
  */

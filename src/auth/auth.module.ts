@@ -10,7 +10,7 @@ import { getRecaptchaConfig } from 'src/config/recaptcha.config';
 import { ProviderModule } from './provider/provider.module';
 import { getProvidersConfig } from 'src/config/providers.config';
 import { EmailConfirmationModule } from './email-confirmation/email-confirmation.module';
-import { MailService } from 'src/libs/mail/mail.service';
+import { MailService } from '../libs/mail/mail.service';
 import { TwoFactorAuthService } from './two-factor-auth/two-factor-auth.service';
 import { PasswordRecoveryModule } from './password-recovery/password-recovery.module';
 
