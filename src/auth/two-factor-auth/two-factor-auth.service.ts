@@ -6,7 +6,7 @@ import {
 import { TokenType } from '@prisma/client'
 
 import { MailService } from '../../libs/mail/mail.service'
-import { PrismaService } from 'src/prisma/prisma.service'
+import { PrismaService } from '../../prisma/prisma.service'
 
 /**
  * Сервис для управления двухфакторной аутентификацией.

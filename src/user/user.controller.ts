@@ -1,8 +1,8 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Query, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserService } from './user.service';
-import { Authorized } from 'src/auth/decorators/authorized.decorator';
-import { Authorization } from 'src/auth/decorators/auth.decorator';
+import { Authorized } from '../auth/decorators/authorized.decorator';
+import { Authorization } from '../auth/decorators/auth.decorator';
 import { UserRole } from '@prisma/client';
 import { UpdateUserDto } from './dto/update-user.dto';
 

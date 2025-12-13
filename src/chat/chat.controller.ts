@@ -1,8 +1,8 @@
 import { Controller, Get, Put, Delete, Param, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { GetMessagesDto } from './dto/chat.dto';
-import { Authorization } from 'src/auth/decorators/auth.decorator';
-import { Authorized } from 'src/auth/decorators/authorized.decorator';
+import { Authorization } from '../auth/decorators/auth.decorator';
+import { Authorized } from '../auth/decorators/authorized.decorator';
 
 @Controller('chats')
 export class ChatController {

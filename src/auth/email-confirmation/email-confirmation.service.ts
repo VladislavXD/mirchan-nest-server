@@ -9,8 +9,8 @@ import { TokenType } from '@prisma/client'
 import { Request } from 'express'
 
 import { MailService } from '../../libs/mail/mail.service'
-import { PrismaService } from 'src/prisma/prisma.service'
-import { UserService } from 'src/user/user.service'
+import { PrismaService } from '../../prisma/prisma.service'
+import { UserService } from '../../user/user.service'
 
 import { AuthService } from '../auth.service'
 

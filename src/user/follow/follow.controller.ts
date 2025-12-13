@@ -11,7 +11,7 @@ import {
 	HttpStatus
 } from '@nestjs/common';
 import { FollowService } from './follow.service';
-import { AuthGuard } from 'src/auth/guards/auth.guard';
+import { AuthGuard } from '../../auth/guards/auth.guard';
 
 @Controller('follow')
 @UseGuards(AuthGuard)

@@ -1,14 +1,14 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { CloudinaryModule } from 'src/cloudinary/cloudinary.module';
-import { UserService } from 'src/user/user.service';
-import { PrismaModule } from 'src/prisma/prisma.module';
+import { CloudinaryModule } from '../cloudinary/cloudinary.module'
+import { UserService } from '../user/user.service';
+import { PrismaModule } from '../prisma/prisma.module';
 import { GoogleRecaptchaModule } from '@nestlab/google-recaptcha';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { getRecaptchaConfig } from 'src/config/recaptcha.config';
+import { getRecaptchaConfig } from '../config/recaptcha.config';
 import { ProviderModule } from './provider/provider.module';
-import { getProvidersConfig } from 'src/config/providers.config';
+import { getProvidersConfig } from '../config/providers.config';
 import { EmailConfirmationModule } from './email-confirmation/email-confirmation.module';
 import { MailService } from '../libs/mail/mail.service';
 import { TwoFactorAuthService } from './two-factor-auth/two-factor-auth.service';
