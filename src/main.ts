@@ -52,7 +52,7 @@ async function bootstrap() {
 					secure: parseBoolean(
 						config.getOrThrow<string>('SESSION_SECURE')
 					),
-					sameSite: 'lax'
+					sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
 				},
 				store: new RedisStore({
 					client: redis,
