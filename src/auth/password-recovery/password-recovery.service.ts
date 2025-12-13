@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common'
 import { TokenType } from '@prisma/client'
 import { hash } from 'argon2'
-import { v4 as uuidv4 } from 'uuid'
 
 import { MailService } from 'src/libs/mail/mail.service'
 import { PrismaService } from 'src/prisma/prisma.service'
@@ -122,6 +121,7 @@ export class PasswordRecoveryService {
 	 * @returns Объект токена сброса пароля.
 	 */
 	private async generatePasswordResetToken(email: string) {
+		const { v4: uuidv4 } = await import('uuid')
 		const token = uuidv4()
 		const expiresIn = new Date(new Date().getTime() + 3600 * 1000)
 
