@@ -77,14 +77,6 @@ async function bootstrap() {
 		exposedHeaders: ['Set-Cookie']
 	})
 
-	// Для Vercel serverless
-	if (process.env.VERCEL) {
-		const expressApp = app.getHttpAdapter().getInstance()
-		module.exports = expressApp
-		return
-	}
-
 	await app.listen(config.getOrThrow<number>('APPLICATION_PORT'))
 }
-
-module.exports = bootstrap
+bootstrap()
