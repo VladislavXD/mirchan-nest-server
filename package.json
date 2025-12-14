@@ -7,9 +7,11 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build && prisma generate",
+    "build": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
+    "vercel-build": "prisma generate && nest build",
+    "postinstall": "prisma generate",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
