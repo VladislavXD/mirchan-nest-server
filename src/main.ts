@@ -26,6 +26,11 @@ import { parseBoolean } from './libs/common/utils/parse-boolean.util'
 async function bootstrap() {
 	const app = await NestFactory.create(AppModule)
 
+	// Приложение работает за прокси (Vercel) — доверяем первому прокси,
+	// чтобы express/express-session корректно определяли протокол (https) и заголовки.
+	const expressApp = app.getHttpAdapter().getInstance() as any
+	expressApp.set('trust proxy', 1)
+
 	const config = app.get(ConfigService)
 	// Подключение node-redis (connect-redis v9 не поддерживает ioredis)
 	const redis = createClient({
@@ -75,7 +80,8 @@ async function bootstrap() {
 		// Настройки CORS для приложения
 		origin: config.getOrThrow<string>('ALLOWED_ORIGIN'),
 		credentials: true,
-		exposedHeaders: ['set-cookie']
+		// экспонируем Set-Cookie чтобы браузер и прокси могли увидеть заголовок
+		exposedHeaders: ['Set-Cookie', 'set-cookie']
 	})
 
 	await app.listen(config.getOrThrow<number>('APPLICATION_PORT'))
