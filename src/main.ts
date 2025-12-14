@@ -28,8 +28,8 @@ async function bootstrap() {
 
 	// Приложение работает за прокси (Vercel) — доверяем первому прокси,
 	// чтобы express/express-session корректно определяли протокол (https) и заголовки.
-	const expressApp = app.getHttpAdapter().getInstance() as any
-	expressApp.set('trust proxy', 1)
+	// const expressApp = app.getHttpAdapter().getInstance() as any
+	// expressApp.set('trust proxy', 1)
 
 	const config = app.get(ConfigService)
 	// Подключение node-redis (connect-redis v9 не поддерживает ioredis)
@@ -57,7 +57,7 @@ async function bootstrap() {
 					secure: parseBoolean(
 						config.getOrThrow<string>('SESSION_SECURE')
 					),
-					sameSite: "none"
+					sameSite: config.getOrThrow<'lax' | 'strict' | 'none'>('SESSION_SAME_SITE')
 				},
 				store: new RedisStore({
 					client: redis,
