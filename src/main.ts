@@ -79,4 +79,4 @@ async function bootstrap() {
 }
 
 // Для Vercel serverless functions экспортируем приложение
-export default bootstrap;
+bootstrap()
