@@ -57,6 +57,7 @@ async function bootstrap() {
 				store: new RedisStore({
 					client: redis,
 					prefix: config.getOrThrow<string>('SESSION_FOLDER'),
+					ttl: ms(config.getOrThrow<StringValue>('SESSION_MAX_AGE')) / 1000
 					// Можно настроить ttl вручную если нужно: ttl: 60 * 60 * 24
 				})
 			})
