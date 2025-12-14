@@ -13,6 +13,7 @@ import { parseBoolean } from './libs/common/utils/parse-boolean.util'
 
 
 
+
 /**
  * Запускает приложение NestJS.
  *
@@ -41,8 +42,7 @@ async function bootstrap() {
 
 	// Получаем SESSION_DOMAIN, если пустой - не устанавливаем (браузер будет использовать текущий origin)
 	const sessionDomain = config.get<string>('SESSION_DOMAIN')
-
-	app.use(
+app.use(
 			session({
 				secret: config.getOrThrow<string>('SESSION_SECRET'),
 				name: config.getOrThrow<string>('SESSION_NAME'),
@@ -57,7 +57,7 @@ async function bootstrap() {
 					secure: parseBoolean(
 						config.getOrThrow<string>('SESSION_SECURE')
 					),
-					sameSite: config.getOrThrow<'lax' | 'strict' | 'none'>('SESSION_SAME_SITE')
+					sameSite: "none"
 				},
 				store: new RedisStore({
 					client: redis,
