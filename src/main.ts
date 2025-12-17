@@ -45,14 +45,17 @@ async function bootstrap() {
   const sessionSameSite = config.getOrThrow<'lax' | 'strict' | 'none' | boolean>('SESSION_SAME_SITE');
   
   // Создаем конфигурацию cookie
-  // ВАЖНО: Не устанавливаем domain здесь, так как это может помешать установке cookie на основном домене
-  // Для передачи cookie на субдомены используем другой подход (см. middleware ниже)
   const cookieConfig: any = {
     maxAge: sessionMaxAge,
     httpOnly: sessionHttpOnly,
     secure: sessionSecure,
     sameSite: sessionSameSite,
   };
+  
+  // Добавляем domain в конфигурацию, если установлен
+  if (sessionDomain && sessionDomain.trim()) {
+    cookieConfig.domain = sessionDomain;
+  }
   
   console.log('🍪 Session cookie config:', {
     name: sessionName,
@@ -62,6 +65,29 @@ async function bootstrap() {
     sameSite: sessionSameSite,
     domain: sessionDomain || '(not set - will use current origin)',
   });
+  
+  // Middleware для перехвата res.cookie() ДО того, как express-session установит cookie
+  // Это нужно для установки правильного domain, который Vercel не сможет перезаписать
+  if (sessionDomain && sessionDomain.trim()) {
+    app.use((req: any, res: any, next: any) => {
+      const originalCookie = res.cookie.bind(res);
+      
+      // Перехватываем res.cookie() для добавления domain к session cookie
+      res.cookie = function(name: string, value: any, options: any = {}) {
+        if (name === sessionName) {
+          // Принудительно устанавливаем domain, перезаписывая любые другие значения
+          options = {
+            ...options,
+            domain: sessionDomain,
+          };
+          console.log('🍪 [res.cookie] Setting cookie with domain:', sessionDomain, 'for', name);
+        }
+        return originalCookie(name, value, options);
+      };
+      
+      next();
+    });
+  }
   
   app.use(
     session({
@@ -78,54 +104,69 @@ async function bootstrap() {
     }),
   );
   
-  // Middleware для добавления/замены domain в cookie ПОСЛЕ того, как она установлена (если SESSION_DOMAIN установлен)
-  // Это нужно для передачи cookie на субдомены (socket.mirchan.site)
-  // ВАЖНО: Vercel может автоматически устанавливать domain на свой домен, поэтому мы принудительно заменяем его
+  // Middleware для принудительной замены domain в Set-Cookie заголовках ПОСЛЕ express-session
+  // Это последняя попытка исправить domain, если Vercel все еще перезаписывает его
   if (sessionDomain && sessionDomain.trim()) {
     app.use((req: any, res: any, next: any) => {
-      const originalEnd = res.end.bind(res);
-      res.end = function(chunk?: any, encoding?: any) {
-        // Получаем Set-Cookie заголовки
-        const setCookieHeaders = res.getHeader('set-cookie');
-        if (setCookieHeaders) {
-          const cookies = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+      const originalSetHeader = res.setHeader.bind(res);
+      const originalWriteHead = res.writeHead.bind(res);
+      
+      // Перехватываем setHeader для Set-Cookie
+      res.setHeader = function(name: string, value: any) {
+        if (name.toLowerCase() === 'set-cookie') {
+          const cookies = Array.isArray(value) ? value : [value];
           const updatedCookies = cookies.map((cookie: string) => {
-            // Ищем session cookie
             if (cookie.startsWith(`${sessionName}=`)) {
-              // Удаляем существующий Domain= если есть (Vercel может установить свой)
+              // Удаляем любой существующий Domain= и добавляем правильный
               let cookieWithoutDomain = cookie.replace(/;\s*Domain=[^;]+/gi, '');
-              
-              // Добавляем правильный domain
+              const updated = `${cookieWithoutDomain}; Domain=${sessionDomain}`;
+              console.log('🍪 [setHeader] Forcing domain in Set-Cookie:', updated.substring(0, 100) + '...');
+              return updated;
+            }
+            return cookie;
+          });
+          return originalSetHeader(name, updatedCookies);
+        }
+        return originalSetHeader(name, value);
+      };
+      
+      // Перехватываем writeHead (используется для установки заголовков)
+      res.writeHead = function(statusCode: number, statusMessage?: any, headers?: any) {
+        if (headers && headers['set-cookie']) {
+          const cookies = Array.isArray(headers['set-cookie']) ? headers['set-cookie'] : [headers['set-cookie']];
+          headers['set-cookie'] = cookies.map((cookie: string) => {
+            if (cookie.startsWith(`${sessionName}=`)) {
+              let cookieWithoutDomain = cookie.replace(/;\s*Domain=[^;]+/gi, '');
               return `${cookieWithoutDomain}; Domain=${sessionDomain}`;
             }
             return cookie;
           });
-          
-          // Устанавливаем обновленные cookie
-          res.setHeader('set-cookie', updatedCookies);
-          console.log('🍪 Updated Set-Cookie with domain:', updatedCookies);
-          console.log('🍪 Target domain:', sessionDomain);
+          console.log('🍪 [writeHead] Forcing domain in Set-Cookie');
+        }
+        return originalWriteHead(statusCode, statusMessage, headers);
+      };
+      
+      // Перехватываем res.end для финальной проверки
+      const originalEnd = res.end.bind(res);
+      res.end = function(chunk?: any, encoding?: any) {
+        const setCookieHeaders = res.getHeader('set-cookie');
+        if (setCookieHeaders) {
+          const cookies = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+          cookies.forEach((cookie: string) => {
+            if (cookie.startsWith(`${sessionName}=`)) {
+              console.log('🍪 [end] Final cookie domain check:', cookie.includes(`Domain=${sessionDomain}`) ? '✅ Correct' : '❌ Wrong domain');
+              if (!cookie.includes(`Domain=${sessionDomain}`)) {
+                console.log('🍪 [end] Cookie domain:', cookie.match(/Domain=([^;]+)/)?.[1] || 'not found');
+              }
+            }
+          });
         }
         return originalEnd(chunk, encoding);
       };
+      
       next();
     });
   }
-  
-  // Middleware для логирования установки cookie (для диагностики)
-  app.use((req: any, res: any, next: any) => {
-    const originalEnd = res.end.bind(res);
-    res.end = function(chunk?: any, encoding?: any) {
-      // Логируем Set-Cookie заголовки для диагностики
-      const setCookieHeaders = res.getHeader('set-cookie');
-      if (setCookieHeaders) {
-        const cookies = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
-        console.log('🍪 Final Set-Cookie headers:', cookies);
-      }
-      return originalEnd(chunk, encoding);
-    };
-    next();
-  });
 
   app.useGlobalPipes(
     new ValidationPipe({
