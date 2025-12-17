@@ -78,9 +78,9 @@ async function bootstrap() {
     }),
   );
   
-  // Middleware для добавления domain к cookie ПОСЛЕ того, как она установлена (если SESSION_DOMAIN установлен)
+  // Middleware для добавления/замены domain в cookie ПОСЛЕ того, как она установлена (если SESSION_DOMAIN установлен)
   // Это нужно для передачи cookie на субдомены (socket.mirchan.site)
-  // Работает только если cookie уже установлена без domain
+  // ВАЖНО: Vercel может автоматически устанавливать domain на свой домен, поэтому мы принудительно заменяем его
   if (sessionDomain && sessionDomain.trim()) {
     app.use((req: any, res: any, next: any) => {
       const originalEnd = res.end.bind(res);
@@ -92,11 +92,11 @@ async function bootstrap() {
           const updatedCookies = cookies.map((cookie: string) => {
             // Ищем session cookie
             if (cookie.startsWith(`${sessionName}=`)) {
-              // Проверяем, есть ли уже domain
-              if (!cookie.includes('Domain=')) {
-                // Добавляем domain в конец cookie строки
-                return `${cookie}; Domain=${sessionDomain}`;
-              }
+              // Удаляем существующий Domain= если есть (Vercel может установить свой)
+              let cookieWithoutDomain = cookie.replace(/;\s*Domain=[^;]+/gi, '');
+              
+              // Добавляем правильный domain
+              return `${cookieWithoutDomain}; Domain=${sessionDomain}`;
             }
             return cookie;
           });
@@ -104,6 +104,7 @@ async function bootstrap() {
           // Устанавливаем обновленные cookie
           res.setHeader('set-cookie', updatedCookies);
           console.log('🍪 Updated Set-Cookie with domain:', updatedCookies);
+          console.log('🍪 Target domain:', sessionDomain);
         }
         return originalEnd(chunk, encoding);
       };
