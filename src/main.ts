@@ -44,53 +44,24 @@ async function bootstrap() {
   const sessionSecure = parseBoolean(config.getOrThrow<string>('SESSION_SECURE'));
   const sessionSameSite = config.getOrThrow<'lax' | 'strict' | 'none' | boolean>('SESSION_SAME_SITE');
   
-  // Middleware для динамической установки domain в cookie (если SESSION_DOMAIN установлен)
-  // Это нужно для передачи cookie на субдомены (socket.mirchan.site)
-  // Устанавливаем ПЕРЕД session middleware, чтобы перехватить установку cookie
-  if (sessionDomain && sessionDomain.trim()) {
-    app.use((req: any, res: any, next: any) => {
-      const originalCookie = res.cookie.bind(res);
-      const originalEnd = res.end.bind(res);
-      
-      // Перехватываем res.cookie() для добавления domain к session cookie
-      res.cookie = function(name: string, value: any, options: any = {}) {
-        if (name === sessionName) {
-          // Добавляем domain к опциям cookie
-          options = {
-            ...options,
-            domain: sessionDomain,
-          };
-        }
-        return originalCookie(name, value, options);
-      };
-      
-      // Также перехватываем установку заголовков напрямую (на случай если express-session использует setHeader)
-      const originalSetHeader = res.setHeader.bind(res);
-      res.setHeader = function(name: string, value: any) {
-        if (name.toLowerCase() === 'set-cookie' && Array.isArray(value)) {
-          const updatedCookies = value.map((cookie: string) => {
-            if (cookie.startsWith(`${sessionName}=`)) {
-              // Проверяем, есть ли уже domain в cookie
-              if (!cookie.includes('Domain=')) {
-                // Извлекаем cookie value и атрибуты
-                const parts = cookie.split(';');
-                const cookieValue = parts[0];
-                const attrs = parts.slice(1).map((p: string) => p.trim()).filter((p: string) => !p.startsWith('Domain='));
-                
-                // Добавляем domain
-                return [cookieValue, `Domain=${sessionDomain}`, ...attrs].join('; ');
-              }
-            }
-            return cookie;
-          });
-          return originalSetHeader(name, updatedCookies);
-        }
-        return originalSetHeader(name, value);
-      };
-      
-      next();
-    });
-  }
+  // Создаем конфигурацию cookie
+  // ВАЖНО: Не устанавливаем domain здесь, так как это может помешать установке cookie на основном домене
+  // Для передачи cookie на субдомены используем другой подход (см. middleware ниже)
+  const cookieConfig: any = {
+    maxAge: sessionMaxAge,
+    httpOnly: sessionHttpOnly,
+    secure: sessionSecure,
+    sameSite: sessionSameSite,
+  };
+  
+  console.log('🍪 Session cookie config:', {
+    name: sessionName,
+    maxAge: sessionMaxAge,
+    httpOnly: sessionHttpOnly,
+    secure: sessionSecure,
+    sameSite: sessionSameSite,
+    domain: sessionDomain || '(not set - will use current origin)',
+  });
   
   app.use(
     session({
@@ -98,13 +69,7 @@ async function bootstrap() {
       name: sessionName,
       resave: true,
       saveUninitialized: false,
-      cookie: {
-        maxAge: sessionMaxAge,
-        httpOnly: sessionHttpOnly,
-        secure: sessionSecure,
-        sameSite: sessionSameSite,
-        // Domain будет добавлен через перехваченный res.cookie() и setHeader() выше
-      },
+      cookie: cookieConfig,
       store: new RedisStore({
         client: redis,
         prefix: config.getOrThrow<string>('SESSION_FOLDER'),
@@ -112,6 +77,54 @@ async function bootstrap() {
       }),
     }),
   );
+  
+  // Middleware для добавления domain к cookie ПОСЛЕ того, как она установлена (если SESSION_DOMAIN установлен)
+  // Это нужно для передачи cookie на субдомены (socket.mirchan.site)
+  // Работает только если cookie уже установлена без domain
+  if (sessionDomain && sessionDomain.trim()) {
+    app.use((req: any, res: any, next: any) => {
+      const originalEnd = res.end.bind(res);
+      res.end = function(chunk?: any, encoding?: any) {
+        // Получаем Set-Cookie заголовки
+        const setCookieHeaders = res.getHeader('set-cookie');
+        if (setCookieHeaders) {
+          const cookies = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+          const updatedCookies = cookies.map((cookie: string) => {
+            // Ищем session cookie
+            if (cookie.startsWith(`${sessionName}=`)) {
+              // Проверяем, есть ли уже domain
+              if (!cookie.includes('Domain=')) {
+                // Добавляем domain в конец cookie строки
+                return `${cookie}; Domain=${sessionDomain}`;
+              }
+            }
+            return cookie;
+          });
+          
+          // Устанавливаем обновленные cookie
+          res.setHeader('set-cookie', updatedCookies);
+          console.log('🍪 Updated Set-Cookie with domain:', updatedCookies);
+        }
+        return originalEnd(chunk, encoding);
+      };
+      next();
+    });
+  }
+  
+  // Middleware для логирования установки cookie (для диагностики)
+  app.use((req: any, res: any, next: any) => {
+    const originalEnd = res.end.bind(res);
+    res.end = function(chunk?: any, encoding?: any) {
+      // Логируем Set-Cookie заголовки для диагностики
+      const setCookieHeaders = res.getHeader('set-cookie');
+      if (setCookieHeaders) {
+        const cookies = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+        console.log('🍪 Final Set-Cookie headers:', cookies);
+      }
+      return originalEnd(chunk, encoding);
+    };
+    next();
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
