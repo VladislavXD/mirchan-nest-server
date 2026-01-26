@@ -32,38 +32,97 @@ export class PostService {
 	 * @returns Созданный пост с автором, лайками и комментариями
 	 */
 	async create(userId: string, createPostDto: CreatePostDto) {
-		const { content, emojiUrls, imageBuffer, imageOriginalFilename } = createPostDto
+		const { content, contentSpoiler, emojiUrls, mediaFiles, mediaSpoilers } = createPostDto
 
 		if (!content) {
 			throw new BadRequestException('Содержимое поста обязательно')
 		}
 
 		try {
-			let imageUrl: string | null = null
+			// Загружаем все медиа файлы в Cloudinary
+			const uploadedMedia: Array<{
+				url: string
+				publicId: string
+				previewUrl?: string
+				name?: string
+				size?: number
+				mimeType: string
+				type: 'IMAGE' | 'VIDEO' | 'GIF'
+				width?: number
+				height?: number
+				duration?: number
+				spoiler: boolean
+			}> = []
 
-			// Загружаем изображение в Cloudinary, если оно есть
-			if (imageBuffer && imageOriginalFilename) {
-				try {
-					const filename = `post_${userId}_${Date.now()}`
-					const uploadResult = await this.cloudinary.uploadBuffer(
-						imageBuffer,
-						filename,
-						'mirchanPost'
-					)
-					imageUrl = uploadResult.secure_url
-				} catch (uploadError) {
-					console.error('Cloudinary upload error:', uploadError)
-					throw new InternalServerErrorException('Ошибка загрузки изображения')
+			if (mediaFiles && mediaFiles.length > 0) {
+				for (let i = 0; i < mediaFiles.length; i++) {
+					const mediaFile = mediaFiles[i]
+					const { buffer, originalname, mimetype, size } = mediaFile
+					
+					if (!buffer || !mimetype) continue
+
+					try {
+						// Определяем тип медиа и resourceType для Cloudinary
+						let mediaType: 'IMAGE' | 'VIDEO' | 'GIF' = 'IMAGE'
+						let resourceType: 'image' | 'video' | 'auto' = 'auto'
+						
+						if (mimetype.startsWith('video/')) {
+							mediaType = 'VIDEO'
+							resourceType = 'video'
+						} else if (mimetype === 'image/gif') {
+							mediaType = 'GIF'
+							resourceType = 'image'
+						} else if (mimetype.startsWith('image/')) {
+							resourceType = 'image'
+						} else {
+							resourceType = 'auto'
+						}
+
+						console.log(`Uploading file ${i}: ${originalname}, mimetype: ${mimetype}, resourceType: ${resourceType}, mediaType: ${mediaType}`)
+
+						const filename = `post_${userId}_${Date.now()}_${i}`
+						const uploadResult = await this.cloudinary.uploadBuffer(
+							buffer,
+							filename,
+							'mirchanPost',
+							resourceType
+						)
+
+						console.log(`Successfully uploaded: ${uploadResult.secure_url}`)
+
+						// Проверяем, есть ли спойлер для этого файла (по индексу)
+						const hasSpoiler = mediaSpoilers ? mediaSpoilers[i] === true : false
+
+						uploadedMedia.push({
+							url: uploadResult.secure_url,
+							publicId: uploadResult.public_id,
+							previewUrl: uploadResult.eager?.[0]?.secure_url, // Превью если есть
+							name: originalname,
+							size,
+							mimeType: mimetype,
+							type: mediaType,
+							width: uploadResult.width,
+							height: uploadResult.height,
+							duration: uploadResult.duration,
+							spoiler: hasSpoiler
+						})
+					} catch (uploadError) {
+						console.error(`Cloudinary upload error for file ${originalname} (${mimetype}):`, uploadError)
+						// Продолжаем загрузку остальных файлов
+					}
 				}
 			}
 
-			// Создаём пост с включением автора, лайков и комментариев
+			// Создаём пост с медиа файлами
 			const post = await this.prisma.post.create({
 				data: {
-					content,
+					content: typeof content === 'string' ? content : JSON.stringify(content),
+					contentSpoiler: contentSpoiler || false,
 					authorId: userId,
-					imageUrl,
-					emojiUrls: emojiUrls || []
+					emojiUrls: emojiUrls || [],
+					media: {
+						create: uploadedMedia
+					}
 				},
 				include: {
 					author: {
@@ -73,7 +132,8 @@ export class PostService {
 						}
 					},
 					likes: true,
-					comments: true
+					comments: true,
+					media: true // Включаем медиа файлы
 				}
 			})
 
@@ -102,7 +162,8 @@ export class PostService {
 						}
 					},
 					likes: true,
-					comments: true
+					comments: true,
+					media: true // Включаем медиа файлы
 				},
 				orderBy: {
 					createdAt: 'desc'
@@ -142,7 +203,8 @@ export class PostService {
 							followers: true,
 							following: true
 						}
-					}
+					},
+					media: true // Включаем медиа файлы
 				}
 			})
 
@@ -183,7 +245,8 @@ export class PostService {
 							following: true
 						}
 					},
-					comments: true
+					comments: true,
+					media: true // Включаем медиа файлы
 				},
 				orderBy: {
 					createdAt: 'desc'
@@ -206,10 +269,13 @@ export class PostService {
 	 * @returns Обновлённый пост
 	 */
 	async update(id: string, userId: string, updatePostDto: UpdatePostDto) {
-		const { content, emojiUrls, imageBuffer, imageOriginalFilename } = updatePostDto
+		const { content, contentSpoiler, emojiUrls } = updatePostDto
 
 		try {
-			const post = await this.prisma.post.findUnique({ where: { id } })
+			const post = await this.prisma.post.findUnique({ 
+				where: { id },
+				include: { media: true }
+			})
 
 			if (!post) {
 				throw new NotFoundException('Пост не найден')
@@ -219,40 +285,17 @@ export class PostService {
 				throw new ForbiddenException('Нет доступа')
 			}
 
-			let newImageUrl = post.imageUrl
-
-			// Если пришёл новый файл, удаляем старый и грузим новый
-			if (imageBuffer && imageOriginalFilename) {
-				try {
-					// Удаляем старое изображение из Cloudinary
-					if (post.imageUrl) {
-						await this.cloudinary.deleteByUrl(post.imageUrl)
-					}
-
-					// Загружаем новое
-					const filename = `post_${userId}_${Date.now()}`
-					const uploadResult = await this.cloudinary.uploadBuffer(
-						imageBuffer,
-						filename,
-						'mirchanPost'
-					)
-					newImageUrl = uploadResult.secure_url
-				} catch (e) {
-					console.error('Cloudinary upload error:', e)
-					throw new InternalServerErrorException('Ошибка загрузки изображения')
-				}
-			}
-
 			const updated = await this.prisma.post.update({
 				where: { id },
 				data: {
-					...(typeof content === 'string' ? { content } : {}),
-					...(emojiUrls ? { emojiUrls } : {}),
-					imageUrl: newImageUrl
+					...(content ? { content: typeof content === 'string' ? content : JSON.stringify(content) } : {}),
+					...(typeof contentSpoiler === 'boolean' ? { contentSpoiler } : {}),
+					...(emojiUrls ? { emojiUrls } : {})
 				},
 				include: {
 					comments: true,
 					likes: true,
+					media: true, // Включаем медиа файлы
 					author: {
 						include: { 
 							followers: true, 
@@ -279,7 +322,10 @@ export class PostService {
 	 * @param userId - ID текущего пользователя
 	 */
 	async remove(id: string, userId: string) {
-		const post = await this.prisma.post.findUnique({ where: { id } })
+		const post = await this.prisma.post.findUnique({ 
+			where: { id },
+			include: { media: true }
+		})
 
 		if (!post) {
 			throw new NotFoundException('Пост не найден')
@@ -290,13 +336,21 @@ export class PostService {
 		}
 
 		try {
-			// Удаляем изображение из Cloudinary, если оно есть
-			if (post.imageUrl) {
-				await this.cloudinary.deleteByUrl(post.imageUrl)
+			// Удаляем все медиа файлы из Cloudinary
+			if (post.media && post.media.length > 0) {
+				for (const mediaFile of post.media) {
+					try {
+						await this.cloudinary.deleteFile(mediaFile.publicId)
+					} catch (deleteError) {
+						console.error('Error deleting media from Cloudinary:', deleteError)
+						// Продолжаем даже если не удалось удалить один файл
+					}
+				}
 			}
 
-			// Транзакция: удаляем комментарии, лайки, затем сам пост
+			// Транзакция: удаляем медиа, комментарии, лайки, затем сам пост
 			const transaction = await this.prisma.$transaction([
+				this.prisma.mediaFile.deleteMany({ where: { postId: id } }),
 				this.prisma.comment.deleteMany({ where: { postId: id } }),
 				this.prisma.like.deleteMany({ where: { postId: id } }),
 				this.prisma.post.delete({ where: { id } })

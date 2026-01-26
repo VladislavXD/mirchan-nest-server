@@ -144,6 +144,49 @@ export class ForumController {
     return this.forumService.getCategoryBySlug(slug);
   }
 
+  @Get('categories/:slug/threads')
+  getCategoryThreads(
+    @Param('slug') slug: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('tag') tagSlug?: string,
+  ) {
+    return this.forumService.getCategoryThreads(slug, page, limit, tagSlug);
+  }
+
+  @Post('categories/:slug/threads')
+  @UseInterceptors(FilesInterceptor('images', 5))
+  async createThreadInCategory(
+    @Param('slug') slug: string,
+    @Body() createThreadDto: CreateThreadDto,
+    @UploadedFiles() files: any[],
+    @Req() request: Request,
+  ) {
+    const ip = getRealIp(request);
+    return this.forumService.createThreadInCategory(slug, createThreadDto, ip, files);
+  }
+
+  @Get('categories/:slug/threads/:threadSlug')
+  getThreadByCategoryAndSlug(
+    @Param('slug') slug: string,
+    @Param('threadSlug') threadSlug: string,
+  ) {
+    return this.forumService.getThreadByCategoryAndSlug(slug, threadSlug);
+  }
+
+  @Post('categories/:slug/threads/:threadId/replies')
+  @UseInterceptors(FilesInterceptor('images', 5))
+  async createReplyInCategory(
+    @Param('slug') slug: string,
+    @Param('threadId') threadId: string,
+    @Body() createReplyDto: CreateReplyDto,
+    @UploadedFiles() files: any[],
+    @Req() request: Request,
+  ) {
+    const ip = getRealIp(request);
+    return this.forumService.createReplyInCategory(slug, threadId, createReplyDto, ip, files);
+  }
+
   @Post('categories')
   createCategory(@Body() createCategoryDto: CreateCategoryDto) {
     return this.forumService.createCategory(createCategoryDto);
@@ -170,6 +213,15 @@ export class ForumController {
   @Get('stats')
   getForumStats() {
     return this.forumService.getForumStats();
+  }
+
+  @Get('threads/latest')
+  getLatestThreads(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('nsfw', new DefaultValuePipe('0')) nsfw: string,
+  ) {
+    return this.forumService.getLatestThreads(page, limit, nsfw);
   }
 
   @Get('posts/latest')

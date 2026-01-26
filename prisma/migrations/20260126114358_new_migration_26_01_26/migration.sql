@@ -64,6 +64,21 @@ CREATE TABLE "tokens" (
 );
 
 -- CreateTable
+CREATE TABLE "Notice" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expiredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "type" TEXT NOT NULL,
+    "title" TEXT,
+    "emojiUrl" TEXT,
+
+    CONSTRAINT "Notice_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Follows" (
     "id" TEXT NOT NULL,
     "followerId" TEXT NOT NULL,
@@ -80,10 +95,30 @@ CREATE TABLE "Post" (
     "imageUrl" TEXT,
     "emojiUrls" TEXT[],
     "authorId" TEXT NOT NULL,
-    "views" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "views" TEXT[] DEFAULT ARRAY[]::TEXT[],
 
     CONSTRAINT "Post_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "MediaFile" (
+    "id" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "publicId" TEXT NOT NULL,
+    "name" TEXT,
+    "size" INTEGER,
+    "type" TEXT NOT NULL,
+    "mimeType" TEXT NOT NULL,
+    "thumbnailUrl" TEXT,
+    "width" INTEGER,
+    "height" INTEGER,
+    "duration" INTEGER,
+    "threadId" TEXT,
+    "replyId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "MediaFile_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -110,11 +145,11 @@ CREATE TABLE "Comment" (
 -- CreateTable
 CREATE TABLE "Chat" (
     "id" TEXT NOT NULL,
-    "participants" TEXT[],
     "lastMessage" TEXT,
     "lastMessageAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "participants" TEXT[],
 
     CONSTRAINT "Chat_pkey" PRIMARY KEY ("id")
 );
@@ -129,26 +164,6 @@ CREATE TABLE "Message" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "MediaFile" (
-    "id" TEXT NOT NULL,
-    "url" TEXT NOT NULL,
-    "publicId" TEXT NOT NULL,
-    "name" TEXT,
-    "size" INTEGER,
-    "type" TEXT NOT NULL,
-    "mimeType" TEXT NOT NULL,
-    "thumbnailUrl" TEXT,
-    "width" INTEGER,
-    "height" INTEGER,
-    "duration" INTEGER,
-    "threadId" TEXT,
-    "replyId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "MediaFile_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -297,6 +312,9 @@ CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 CREATE UNIQUE INDEX "tokens_token_key" ON "tokens"("token");
 
 -- CreateIndex
+CREATE INDEX "Notice_userId_idx" ON "Notice"("userId");
+
+-- CreateIndex
 CREATE INDEX "Follows_followerId_idx" ON "Follows"("followerId");
 
 -- CreateIndex
@@ -310,6 +328,12 @@ CREATE INDEX "Post_authorId_idx" ON "Post"("authorId");
 
 -- CreateIndex
 CREATE INDEX "Post_createdAt_idx" ON "Post"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "MediaFile_threadId_idx" ON "MediaFile"("threadId");
+
+-- CreateIndex
+CREATE INDEX "MediaFile_replyId_idx" ON "MediaFile"("replyId");
 
 -- CreateIndex
 CREATE INDEX "Like_userId_idx" ON "Like"("userId");
@@ -334,12 +358,6 @@ CREATE INDEX "Message_chatId_idx" ON "Message"("chatId");
 
 -- CreateIndex
 CREATE INDEX "Message_senderId_idx" ON "Message"("senderId");
-
--- CreateIndex
-CREATE INDEX "MediaFile_threadId_idx" ON "MediaFile"("threadId");
-
--- CreateIndex
-CREATE INDEX "MediaFile_replyId_idx" ON "MediaFile"("replyId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Board_name_key" ON "Board"("name");
@@ -441,25 +459,25 @@ ALTER TABLE "Follows" ADD CONSTRAINT "Follows_followingId_fkey" FOREIGN KEY ("fo
 ALTER TABLE "Post" ADD CONSTRAINT "Post_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Like" ADD CONSTRAINT "Like_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Like" ADD CONSTRAINT "Like_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Comment" ADD CONSTRAINT "Comment_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Comment" ADD CONSTRAINT "Comment_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "MediaFile" ADD CONSTRAINT "MediaFile_replyId_fkey" FOREIGN KEY ("replyId") REFERENCES "Reply"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "MediaFile" ADD CONSTRAINT "MediaFile_threadId_fkey" FOREIGN KEY ("threadId") REFERENCES "Thread"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "MediaFile" ADD CONSTRAINT "MediaFile_replyId_fkey" FOREIGN KEY ("replyId") REFERENCES "Reply"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Like" ADD CONSTRAINT "Like_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Like" ADD CONSTRAINT "Like_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Message" ADD CONSTRAINT "Message_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Thread" ADD CONSTRAINT "Thread_boardId_fkey" FOREIGN KEY ("boardId") REFERENCES "Board"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -483,7 +501,7 @@ ALTER TABLE "Ban" ADD CONSTRAINT "Ban_moderatorId_fkey" FOREIGN KEY ("moderatorI
 ALTER TABLE "Categories" ADD CONSTRAINT "Categories_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "Categories"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "ThreadTag" ADD CONSTRAINT "ThreadTag_threadId_fkey" FOREIGN KEY ("threadId") REFERENCES "Thread"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ThreadTag" ADD CONSTRAINT "ThreadTag_tagId_fkey" FOREIGN KEY ("tagId") REFERENCES "Tag"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "ThreadTag" ADD CONSTRAINT "ThreadTag_tagId_fkey" FOREIGN KEY ("tagId") REFERENCES "Tag"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ThreadTag" ADD CONSTRAINT "ThreadTag_threadId_fkey" FOREIGN KEY ("threadId") REFERENCES "Thread"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -15,27 +15,39 @@ export class CloudinaryService {
 	constructor(@Inject(CLOUDINARY) private readonly cloudinary: typeof CloudinaryV2) {}
 
 	/**
-	 * Загружает изображение из буфера в Cloudinary.
+	 * Загружает изображение или видео из буфера в Cloudinary.
 	 * 
-	 * @param buffer - Буфер изображения
+	 * @param buffer - Буфер файла
 	 * @param filename - Имя файла без расширения
 	 * @param folder - Папка назначения в Cloudinary (по умолчанию "mirchanAvatars")
+	 * @param resourceType - Тип ресурса: 'image', 'video', 'raw' или 'auto' (автоопределение)
 	 * @returns Promise с результатом загрузки или ошибкой
 	 */
 	async uploadBuffer(
 		buffer: Buffer,
 		filename: string,
-		folder: string = 'mirchanAvatars'
+		folder: string = 'mirchanAvatars',
+		resourceType: 'image' | 'video' | 'raw' | 'auto' = 'auto'
 	): Promise<UploadApiResponse> {
 		return new Promise((resolve, reject) => {
+			console.log(`[Cloudinary] Uploading: ${filename}, folder: ${folder}, resourceType: ${resourceType}, bufferSize: ${buffer.length}`)
+			
 			const uploadStream = this.cloudinary.uploader.upload_stream(
 				{
 					folder,
-					public_id: filename
+					public_id: filename,
+					resource_type: resourceType
 				},
 				(error, result) => {
-					if (error) return reject(error)
-					if (!result) return reject(new Error('Upload failed: no result returned'))
+					if (error) {
+						console.error(`[Cloudinary] Upload failed for ${filename}:`, error)
+						return reject(error)
+					}
+					if (!result) {
+						console.error(`[Cloudinary] Upload failed for ${filename}: no result returned`)
+						return reject(new Error('Upload failed: no result returned'))
+					}
+					console.log(`[Cloudinary] Upload success for ${filename}: ${result.secure_url}`)
 					resolve(result)
 				}
 			)
@@ -48,16 +60,36 @@ export class CloudinaryService {
 	 * Удаляет файл из Cloudinary по publicId.
 	 * 
 	 * @param publicId - Public ID файла в Cloudinary (например: "mirchanAvatars/user_123456")
+	 * @param resourceType - Тип ресурса: 'image', 'video', 'raw'. Если не указан, пробуем оба типа
 	 * @returns true если удаление успешно, false в противном случае
 	 */
-	async deleteFile(publicId: string): Promise<boolean> {
+	async deleteFile(publicId: string, resourceType?: 'image' | 'video' | 'raw'): Promise<boolean> {
 		if (!publicId) return false
 
 		try {
-			const result = await this.cloudinary.uploader.destroy(publicId)
+			// Если тип указан, удаляем конкретный тип
+			if (resourceType) {
+				const result = await this.cloudinary.uploader.destroy(publicId, { resource_type: resourceType })
+				
+				if (process.env.NODE_ENV === 'development') {
+					console.log('Cloudinary delete result:', result)
+				}
+				
+				return result.result === 'ok'
+			}
+
+			// Если тип не указан, пробуем удалить как image, затем как video
+			let result = await this.cloudinary.uploader.destroy(publicId, { resource_type: 'image' })
+			
+			if (result.result === 'ok') {
+				return true
+			}
+
+			// Если не удалось как image, пробуем как video
+			result = await this.cloudinary.uploader.destroy(publicId, { resource_type: 'video' })
 			
 			if (process.env.NODE_ENV === 'development') {
-				console.log('Cloudinary delete result:', result)
+				console.log('Cloudinary delete result (video):', result)
 			}
 			
 			return result.result === 'ok'

@@ -20,6 +20,7 @@ import { ForumModule } from './forum/forum.module';
 import { ChatModule } from './chat/chat.module';
 import { AdminModule } from './admin/admin.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { NoticeModule } from './notice/notice.module';
 
 
 
@@ -47,7 +48,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     NewsModule,
     ForumModule,
     ChatModule,
-    AdminModule
+    AdminModule,
+    NoticeModule
   ],
 })
 export class AppModule {}

@@ -10,10 +10,11 @@ import {
 	HttpStatus,
 	UseInterceptors,
 	UploadedFile,
+	UploadedFiles,
 	BadRequestException,
 	Req,
 } from '@nestjs/common'
-import { FileInterceptor } from '@nestjs/platform-express'
+import { FileInterceptor, FileFieldsInterceptor, FilesInterceptor } from '@nestjs/platform-express'
 import { PostService } from './post.service'
 import { ViewsSyncService } from './services/views-sync.service'
 import { CreatePostDto } from './dto/create-post.dto'
@@ -40,22 +41,22 @@ export class PostController {
 	 * Создание нового поста.
 	 * 
 	 * @param userId - ID авторизованного пользователя
-	 * @param file - Загруженный файл изображения (опционально)
+	 * @param files - Загруженные медиа файлы (images и videos)
 	 * @param dto - Данные для создания поста
 	 * @returns Созданный пост
 	 */
 	@Authorization()
 	@HttpCode(HttpStatus.CREATED)
 	@Post()
-	@UseInterceptors(FileInterceptor('image', {
+	@UseInterceptors(FilesInterceptor('media', 30, {
 		limits: {
-			fileSize: 10 * 1024 * 1024, // 10MB максимум
+			fileSize: 100 * 1024 * 1024, // 100MB максимум
 		},
 		fileFilter: (req, file, callback) => {
-			// Разрешаем только изображения
-			if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+			// Разрешаем изображения и видео
+			if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp|mp4|webm|ogg)$/)) {
 				return callback(
-					new BadRequestException('Разрешены только файлы изображений (jpg, jpeg, png, gif, webp)'),
+					new BadRequestException('Разрешены только изображения и видео'),
 					false
 				)
 			}
@@ -64,13 +65,17 @@ export class PostController {
 	}))
 	async create(
 		@Authorized('id') userId: string,
-		@UploadedFile() file: any,
+		@UploadedFiles() files: any[],
 		@Body() dto: CreatePostDto
 	) {
-		// Если загружен файл, добавляем его buffer и имя в DTO
-		if (file) {
-			dto.imageBuffer = file.buffer
-			dto.imageOriginalFilename = file.originalname
+		// Преобразуем загруженные файлы в формат DTO
+		if (files && files.length > 0) {
+			dto.mediaFiles = files.map(file => ({
+				buffer: file.buffer,
+				originalname: file.originalname,
+				mimetype: file.mimetype,
+				size: file.size
+			}))
 		}
 
 		return this.postService.create(userId, dto)
@@ -120,39 +125,17 @@ export class PostController {
 	 * 
 	 * @param id - ID поста
 	 * @param userId - ID авторизованного пользователя
-	 * @param file - Загруженный файл изображения (опционально)
 	 * @param dto - Данные для обновления
 	 * @returns Обновлённый пост
 	 */
 	@Authorization()
 	@HttpCode(HttpStatus.OK)
 	@Patch(':id')
-	@UseInterceptors(FileInterceptor('image', {
-		limits: {
-			fileSize: 10 * 1024 * 1024, // 10MB максимум
-		},
-		fileFilter: (req, file, callback) => {
-			if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
-				return callback(
-					new BadRequestException('Разрешены только файлы изображений (jpg, jpeg, png, gif, webp)'),
-					false
-				)
-			}
-			callback(null, true)
-		}
-	}))
 	async update(
 		@Param('id') id: string,
 		@Authorized('id') userId: string,
-		@UploadedFile() file: any,
 		@Body() dto: UpdatePostDto
 	) {
-		// Если загружен файл, добавляем его buffer и имя в DTO
-		if (file) {
-			dto.imageBuffer = file.buffer
-			dto.imageOriginalFilename = file.originalname
-		}
-
 		return this.postService.update(id, userId, dto)
 	}
 

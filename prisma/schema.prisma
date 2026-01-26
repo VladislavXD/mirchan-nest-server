@@ -43,6 +43,10 @@ model User {
   @@map("users")
 }
 
+
+
+
+
 model Account {
   id String @id @default(uuid())
 
@@ -93,6 +97,19 @@ enum AuthMethod {
   YANDEX
 }
 
+model Notice {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String?
+  emojiUrl  String?
+  content   String
+  createdAt DateTime @default(now())
+  expiredAt DateTime @default(now())
+  active   Boolean  @default(true)
+  type     String
+  @@index([userId])
+}
+
 model Follows {
   id          String   @id @default(uuid())
   followerId  String
@@ -107,20 +124,62 @@ model Follows {
 }
 
 model Post {
-  id        String    @id @default(uuid())
-  content   String
-  imageUrl  String? // URL одного изображения из Cloudinary
-  emojiUrls String[] // Массив URL emoji (gif)
-  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  authorId  String
-  likes     Like[]
-  views     String[]  @default([]) // Массив UUID пользователей, просмотревших пост
-  comments  Comment[]
-  createdAt DateTime  @default(now())
+  id             String      @id @default(uuid())
+  content        Json // Текстовый контент (может включать форматирование)
+  contentSpoiler Boolean     @default(false) // Спойлер для текста
+  media          MediaFile[] // Массив медиа файлов
+  emojiUrls      String[]    @default([]) // Массив URL emoji (gif)
+  author         User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId       String
+  likes          Like[]
+  views          String[]    @default([]) // Массив UUID пользователей, просмотревших пост
+  comments       Comment[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
 
   @@index([authorId])
   @@index([createdAt])
 }
+
+model MediaFile {
+  id         String    @id @default(uuid())
+  url        String // URL файла в Cloudinary
+  publicId   String // Public ID в Cloudinary для удаления
+  previewUrl String? // URL превью/thumbnail
+  name       String? // Оригинальное имя файла
+  size       Int? // Размер файла в байтах
+  mimeType   String // MIME тип файла
+  type       MediaType // Тип: IMAGE, VIDEO, GIF
+  width      Int? // Ширина изображения/видео
+  height     Int? // Высота изображения/видео
+  duration   Int? // Длительность видео в секундах
+  spoiler    Boolean   @default(false) // Спойлер для медиа
+  nsfw       Boolean   @default(false) // NSFW контент
+
+  // Связи с разными сущностями
+  postId   String?
+  post     Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  threadId String?
+  thread   Thread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  replyId  String?
+  reply    Reply?  @relation(fields: [replyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+  @@index([threadId])
+  @@index([replyId])
+  @@index([type])
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  GIF
+}
+
+
 
 model Like {
   id        String   @id @default(uuid())
@@ -169,37 +228,12 @@ model Message {
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
+
   @@index([chatId])
   @@index([senderId])
 }
 
-// Forum models
-model MediaFile {
-  id           String  @id @default(uuid())
-  url          String // URL файла в Cloudinary
-  publicId     String // Public ID в Cloudinary для удаления
-  name         String? // Оригинальное имя файла
-  size         Int? // Размер файла в байтах
-  type         String // Тип файла: "image" или "video"
-  mimeType     String // MIME тип файла
-  thumbnailUrl String? // URL превью в Cloudinary
-  width        Int? // Ширина изображения/видео
-  height       Int? // Высота изображения/видео
-  duration     Int? // Длительность видео в секундах
-
-  // Связи с постами
-  threadId String?
-  replyId  String?
-
-  createdAt DateTime @default(now())
-
-  thread Thread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  reply  Reply?  @relation(fields: [replyId], references: [id], onDelete: Cascade)
-
-  @@index([threadId])
-  @@index([replyId])
-}
-
+// Shared media model for Posts, Threads, and Replies
 model Board {
   id               String   @id @default(uuid())
   name             String   @unique // /b/, /g/, /pol/ и т.д.
