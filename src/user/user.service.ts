@@ -46,6 +46,67 @@ export class UserService {
 				accounts: true,
 				followers: true,
 				following: true,
+				post: {
+					include: {
+						author: {
+							select: {
+								id: true,
+								name: true,
+								username: true,
+								avatarUrl: true,
+								usernameFrameUrl: true,
+								avatarFrameUrl: true
+							}
+						},
+						likes: true,
+						comments: true,
+						media: true
+					},
+					orderBy: {
+						createdAt: 'desc'
+					}
+				},
+				likes: {
+					include: {
+						post: {
+							include: {
+								author: {
+									select: {
+										id: true,
+										name: true,
+										username: true,
+										avatarUrl: true
+									}
+								},
+								media: true,
+								likes: true, // Добавляем массив лайков для вычисления likeByUser
+								comments: true
+							}
+						}
+					},
+					orderBy: {
+						createdAt: 'desc'
+					}
+				},
+				comments: {
+					include: {
+						post: {
+							include: {
+								author: {
+									select: {
+										id: true,
+										name: true,
+										username: true,
+										avatarUrl: true
+									}
+								}
+							}
+						}
+					},
+					orderBy: {
+						createdAt: 'desc'
+					}
+				},
 				_count: {
 					select: {
 						post: true,

@@ -151,33 +151,71 @@ export class PostService {
 	 * @param userId - ID текущего пользователя (опционально)
 	 * @returns Массив постов с автором, лайками, комментариями и likeByUser
 	 */
-	async findAll(userId?: string | null) {
-		try {
-			const posts = await this.prisma.post.findMany({
-				include: {
-					author: {
-						include: {
-							followers: true,
-							following: true
-						}
-					},
-					likes: true,
-					comments: true,
-					media: true // Включаем медиа файлы
-				},
-				orderBy: {
-					createdAt: 'desc'
-				}
-			})
+	async findAll(options: { limit?: number; cursor?: string; userId?: string }) {
+		const { limit = 15, cursor, userId } = options;
 
-			return posts.map(post => ({
-				...post,
-				likeByUser: userId ? post.likes.some(like => like.userId === userId) : false
-			}))
-		} catch (err) {
-			console.error('Get all posts error:', err)
-			throw new InternalServerErrorException('Ошибка при получении постов')
-		}
+		const posts = await this.prisma.post.findMany({
+			take: limit + 1,
+			...(cursor && {
+				cursor: { id: cursor },
+				skip: 1,
+			}),
+			orderBy: { createdAt: 'desc' },
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true,
+						name: true,
+						avatarUrl: true,
+					},
+				},
+				media: true,
+				_count: {
+					select: {
+						likes: true,
+						comments: true,
+						reposts: true,
+					},
+				},
+				// Добавляем информацию о лайке текущего пользователя
+				...(userId && {
+					likes: {
+						where: { userId },
+						select: { id: true },
+					},
+					// Добавляем информацию о репосте текущего пользователя
+					reposts: {
+						where: { userId },
+						select: { id: true, repostComment: true, createdAt: true },
+					},
+				}),
+			},
+		});
+
+		const hasMore = posts.length > limit;
+		const items = hasMore ? posts.slice(0, -1) : posts;
+
+		// Преобразуем данные для фронтенда
+		const transformedItems = items.map((post) => ({
+			...post,
+			likeByUser: userId ? post.likes?.length > 0 : false,
+			repostedByUser: userId ? post.reposts?.length > 0 : false,
+			repostData: userId && post.reposts?.length > 0 ? post.reposts[0] : null,
+			// Преобразуем _count в отдельные поля для фронтенда
+			likesCount: post._count.likes,
+			commentsCount: post._count.comments,
+			repostCount: post._count.reposts,
+			likes: undefined, // Убираем массив likes (только _count нужен)
+			reposts: undefined, // Убираем массив reposts
+			_count: undefined, // Убираем _count после преобразования
+		}));
+
+		return {
+			items: transformedItems,
+			nextCursor: hasMore ? items[items.length - 1].id : null,
+			hasMore,
+		};
 	}
 
 	/**

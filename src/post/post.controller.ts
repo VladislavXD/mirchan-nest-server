@@ -13,6 +13,7 @@ import {
 	UploadedFiles,
 	BadRequestException,
 	Req,
+	Query,
 } from '@nestjs/common'
 import { FileInterceptor, FileFieldsInterceptor, FilesInterceptor } from '@nestjs/platform-express'
 import { PostService } from './post.service'
@@ -89,9 +90,10 @@ export class PostController {
 	 */
 	@HttpCode(HttpStatus.OK)
 	@Get()
-	async findAll(@Req() req: any) {
+
+	async findAll(@Req() req: any, @Query('limit') limit: number = 15, @Query('cursor') cursor?: string) {
 		const userId = req?.session?.userId || null
-		return this.postService.findAll(userId)
+		return this.postService.findAll({userId, limit, cursor})
 	}
 
 	/**

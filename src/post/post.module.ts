@@ -8,6 +8,7 @@ import { CloudinaryModule } from '../cloudinary/cloudinary.module'
 import { RedisModule } from '../redis/redis.module'
 import { UserModule } from '../user/user.module'
 import { AuthModule } from '../auth/auth.module'
+import { RepostModule } from './repost/repost.module';
 
 /**
  * Модуль для работы с постами.
@@ -23,7 +24,8 @@ import { AuthModule } from '../auth/auth.module'
 		RedisModule,
 		UserModule,
 		AuthModule,
-		ScheduleModule.forRoot()
+		ScheduleModule.forRoot(),
+		RepostModule
 	],
 	controllers: [PostController],
 	providers: [PostService, ViewsSyncService],

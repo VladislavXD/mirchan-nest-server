@@ -31,4 +31,28 @@ export class LikeController {
 	) {
 		return this.likeService.unlikePost(userId, postId)
 	}
+
+	/**
+	 * POST /likes/comment/:commentId - Поставить лайк на комментарий
+	 */
+	@Post('comment/:commentId')
+	@Authorization()
+	async likeComment(
+		@Authorized('id') userId: string,
+		@Param('commentId') commentId: string
+	) {
+		return this.likeService.likeComment(userId, commentId)
+	}
+
+	/**
+	 * DELETE /likes/comment/:commentId - Убрать лайк с комментария
+	 */
+	@Delete('comment/:commentId')
+	@Authorization()
+	async unlikeComment(
+		@Authorized('id') userId: string,
+		@Param('commentId') commentId: string
+	) {
+		return this.likeService.unlikeComment(userId, commentId)
+	}
 }
