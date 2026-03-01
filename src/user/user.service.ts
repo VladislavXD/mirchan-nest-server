@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { AuthMethod } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import {hash} from 'argon2'
+import {hash, verify} from 'argon2'
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { generateAvatar } from '../libs/common/utils/generateAvatar';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+
 
 
 @Injectable()
@@ -246,6 +248,8 @@ export class UserService {
 	}
 
 
+	
+
 	/**
 	 * Умный поиск пользователей с нормализацией Unicode
 	 * Поддерживает:
@@ -368,5 +372,59 @@ export class UserService {
 			console.error('Search users error:', error);
 			throw new Error('Ошибка поиска пользователей');
 		}
+	}
+
+	/**
+	 * Изменяет пароль пользователя
+	 * @param userId - ID пользователя
+	 * @param dto - DTO с текущим и новым паролем
+	 * @returns Обновленный пользователь
+	 * @throws NotFoundException - Если пользователь не найден
+	 * @throws BadRequestException - Если пользователь использует OAuth
+	 * @throws UnauthorizedException - Если текущий пароль неверен
+	 */
+	public async changePassword(userId: string, dto: ChangePasswordDto) {
+		const user = await this.findById(userId);
+
+		// Проверяем, что пользователь зарегистрирован через email/password
+		if (!user.password || user.method !== AuthMethod.CREDENTIALS) {
+			throw new BadRequestException(
+				'Невозможно изменить пароль. Ваш аккаунт использует вход через социальные сети (Google, GitHub и т.д.). Для управления паролем войдите через соответствующий сервис.'
+			);
+		}
+
+		// Проверяем текущий пароль
+		const isValidPassword = await verify(user.password, dto.currentPassword);
+
+		if (!isValidPassword) {
+			throw new UnauthorizedException(
+				'Неверный текущий пароль. Пожалуйста, проверьте введенные данные и попробуйте снова.'
+			);
+		}
+
+		// Проверяем, что новый пароль отличается от текущего
+		const isSamePassword = await verify(user.password, dto.newPassword);
+		if (isSamePassword) {
+			throw new BadRequestException(
+				'Новый пароль должен отличаться от текущего пароля.'
+			);
+		}
+
+		// Хешируем и сохраняем новый пароль
+		const hashedPassword = await hash(dto.newPassword);
+
+		return await this.prismaService.user.update({
+			where: { id: userId },
+			data: { 
+				password: hashedPassword,
+				updatedAt: new Date()
+			},
+			select: {
+				id: true,
+				email: true,
+				name: true,
+				username: true
+			}
+		});
 	}
 }

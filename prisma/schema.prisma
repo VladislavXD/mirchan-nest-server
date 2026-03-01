@@ -287,8 +287,8 @@ model Board {
   allowedFileTypes String[] @default(["jpg", "jpeg", "png", "gif", "webp", "webm", "mp4"])
   postsPerPage     Int      @default(15)
   threadsPerPage   Int      @default(10)
-  bumpLimit        Int      @default(500) // лимит постов в треде
-  imageLimit       Int      @default(150) // лимит картинок в треде
+  bumpLimit        Int      @default(500) 
+  imageLimit       Int      @default(150) 
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
 

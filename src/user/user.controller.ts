@@ -1,10 +1,11 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Query, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserService } from './user.service';
 import { Authorized } from '../auth/decorators/authorized.decorator';
 import { Authorization } from '../auth/decorators/auth.decorator';
 import { UserRole } from '@prisma/client';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Controller('users')
 export class UserController {
@@ -111,6 +112,28 @@ export class UserController {
 		return this.userService.update(userId, dto)
 	}
 
-	
+	/**
+	 * Изменяет пароль текущего пользователя в настройках.
+	 * Требует авторизации и проверку текущего пароля.
+	 * 
+	 * @param userId - ID авторизованного пользователя.
+	 * @param dto - DTO с текущим и новым паролем.
+	 * @returns Сообщение об успешной смене пароля.
+	 * 
+	 * @throws BadRequestException - Если аккаунт использует OAuth (Google, GitHub и т.д.).
+	 * @throws UnauthorizedException - Если текущий пароль неверен.
+	 */
+	@Authorization()
+	@HttpCode(HttpStatus.OK)
+	@Post('change-password')
+	public async changePassword(
+		@Authorized('id') userId: string,
+		@Body() dto: ChangePasswordDto
+	) {
+		await this.userService.changePassword(userId, dto);
+		return {
+			message: 'Пароль успешно изменен. Используйте новый пароль при следующем входе.'
+		};
+	}
 
 }
