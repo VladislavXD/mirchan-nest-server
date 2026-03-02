@@ -323,13 +323,25 @@ export class PostService {
 				throw new ForbiddenException('Нет доступа')
 			}
 
+			// Валидация: если контент пустой, проверяем наличие эмодзи или медиа
+			const contentStr = typeof content === 'string' ? content.trim() : '';
+			const hasContent = contentStr.length > 0;
+			const hasEmojis = emojiUrls && emojiUrls.length > 0;
+			const hasMedia = post.media && post.media.length > 0;
+
+			if (!hasContent && !hasEmojis && !hasMedia) {
+				throw new BadRequestException('Пост не может быть пустым');
+			}
+
 			const updated = await this.prisma.post.update({
 				where: { id },
 				data: {
-					...(content ? { content: typeof content === 'string' ? content : JSON.stringify(content) } : {}),
+					...(content !== undefined ? { content: typeof content === 'string' ? content : JSON.stringify(content) } : {}),
 					...(typeof contentSpoiler === 'boolean' ? { contentSpoiler } : {}),
-					...(emojiUrls ? { emojiUrls } : {})
+					...(emojiUrls !== undefined ? { emojiUrls } : {}),
+					isEdited: true
 				},
+				
 				include: {
 					comments: true,
 					likes: true,
@@ -345,7 +357,7 @@ export class PostService {
 
 			return updated
 		} catch (err) {
-			if (err instanceof NotFoundException || err instanceof ForbiddenException) {
+			if (err instanceof NotFoundException || err instanceof ForbiddenException || err instanceof BadRequestException) {
 				throw err
 			}
 			console.error('UpdatePost error:', err)
