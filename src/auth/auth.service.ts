@@ -142,14 +142,20 @@ export class AuthService {
 			return this.saveSession(req, user)
 		}
 
-		user = await this.userService.create(
-			profile.email,
-			'',
-			profile.name,
-			AuthMethod[profile.provider.toUpperCase()],
-			true,
-			profile.picture,
-		)
+		// Пользователь с таким email уже есть (регистрировался через пароль) — просто входим
+		const existingByEmail = await this.userService.findByEmail(profile.email)
+		if (existingByEmail) {
+			user = await this.userService.findById(existingByEmail.id)
+		} else {
+			user = await this.userService.create(
+				profile.email,
+				'',
+				profile.name,
+				AuthMethod[profile.provider.toUpperCase()],
+				true,
+				profile.picture,
+			)
+		}
 
 		if (!account) {
 			await this.prismaService.account.create({

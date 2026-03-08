@@ -23,6 +23,42 @@ export class CommentController {
   }
 
   /**
+   * GET /comment/post/:postId/new - Новые комментарии
+   */
+  @Get('post/:id/new')
+  getNewComment(
+    @Param('id') id: string,
+    @Query('cursor') cursor?: string,
+    @Query('userId') userId?: string
+  ) {
+    return this.commentService.getNewComments(id, cursor, userId)
+  }
+
+  /**
+   * GET /comment/post/:postId/old - Старые комментарии
+   */
+  @Get('post/:id/old')
+  getOldComment(
+    @Param('id') id: string,
+    @Query('cursor') cursor?: string,
+    @Query('userId') userId?: string
+  ) {
+    return this.commentService.getOldComments(id, cursor, userId)
+  }
+
+  /**
+   * GET /comment/post/:postId/popular - Популярные комментарии
+   */
+  @Get('post/:id/popular')
+  getPopularComment(
+    @Param('id') id: string,
+    @Query('cursor') cursor?: string,
+    @Query('userId') userId?: string
+  ) {
+    return this.commentService.getPopularComments(id, cursor, userId)
+  }
+
+  /**
    * GET /comment/post/:postId - Получить комментарии поста
    */
   @Get('post/:postId')
@@ -32,7 +68,6 @@ export class CommentController {
   ) {
     return this.commentService.getPostComments(postId, currentUserId)
   }
-
   /**
    * POST /comment/reply - Создать ответ на комментарий
    */

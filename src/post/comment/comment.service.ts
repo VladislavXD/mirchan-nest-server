@@ -25,32 +25,6 @@ export class CommentService {
    * Получить комментарии поста с информацией о лайках и ответах (рекурсивно)
    */
   async getPostComments(postId: string, currentUserId?: string) {
-    // Вспомогательная функция для рекурсивной загрузки ответов
-    const includeReplies = (depth: number = 3): any => {
-      if (depth === 0) return false;
-      
-      return {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              avatarUrl: true
-            }
-          },
-          likes: {
-            select: {
-              id: true,
-              userId: true
-            }
-          },
-          replies: depth > 1 ? includeReplies(depth - 1) : false
-        },
-        orderBy: { createdAt: 'asc' }
-      };
-    };
-
     const comments = await this.prisma.comment.findMany({
       where: { 
         postId,
@@ -71,21 +45,12 @@ export class CommentService {
             userId: true
           }
         },
-        replies: includeReplies(3) // Загружаем ответы до 3 уровней глубины
+        replies: this.repliesInclude(3)
       },
       orderBy: { createdAt: 'desc' }
     })
 
-    // Рекурсивная функция для преобразования комментария с ответами
-    const transformComment = (comment: any): any => ({
-      ...comment,
-      likeCount: comment.likes.length,
-      likedByUser: currentUserId ? comment.likes.some((like: any) => like.userId === currentUserId) : false,
-      replies: comment.replies?.map((reply: any) => transformComment(reply)) || []
-    });
-
-    // Добавляем информацию о том, лайкнул ли текущий пользователь
-    return comments.map(transformComment);
+    return comments.map(c => this.transformComment(c, currentUserId));
   }
 
   /**
@@ -128,62 +93,76 @@ export class CommentService {
    * Получить ответы на комментарий
    */
   async getCommentReplies(commentId: string, currentUserId?: string) {
-    // Вспомогательная функция для рекурсивной загрузки ответов
-    const includeReplies = (depth: number = 3): any => {
-      if (depth === 0) return false;
-      
-      return {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              avatarUrl: true
-            }
-          },
-          likes: {
-            select: {
-              id: true,
-              userId: true
-            }
-          },
-          replies: depth > 1 ? includeReplies(depth - 1) : false
-        },
-        orderBy: { createdAt: 'asc' }
-      };
-    };
-
     const replies = await this.prisma.comment.findMany({
       where: { replyToId: commentId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            avatarUrl: true
-          }
-        },
-        likes: {
-          select: {
-            id: true,
-            userId: true
-          }
-        },
-        replies: includeReplies(3) // Загружаем ответы до 3 уровней глубины
-      },
+      include: this.commentInclude(),
       orderBy: { createdAt: 'asc' }
     })
 
-    // Рекурсивная функция для преобразования комментария с ответами
-    const transformComment = (comment: any): any => ({
-      ...comment,
-      likeCount: comment.likes.length,
-      likedByUser: currentUserId ? comment.likes.some((like: any) => like.userId === currentUserId) : false,
-      replies: comment.replies?.map((reply: any) => transformComment(reply)) || []
-    });
-
-    return replies.map(transformComment);
+    return replies.map(c => this.transformComment(c, currentUserId));
   }
+
+
+  public async getNewComments(postId: string, cursor?: string, userId?: string){ 
+		return this.prisma.comment.findMany({
+			where: { postId, replyToId: null },
+			orderBy: { createdAt: 'desc' },
+			take: 30,
+			include: this.commentInclude(),
+			...(cursor && { cursor: { id: cursor }, skip: 1 })
+		}).then(comments => comments.map(c => this.transformComment(c, userId)))
+	}
+
+	public async getOldComments(postId: string, cursor?: string, userId?: string){ 
+		return this.prisma.comment.findMany({
+			where: { postId, replyToId: null },
+			orderBy: { createdAt: 'asc' },
+			take: 30,
+			include: this.commentInclude(),
+			...(cursor && { cursor: { id: cursor }, skip: 1 })
+		}).then(comments => comments.map(c => this.transformComment(c, userId)))
+	}
+
+	public async getPopularComments(postId: string, cursor?: string, userId?: string){ 
+		return this.prisma.comment.findMany({
+			where: { postId, replyToId: null },
+			orderBy: { score: 'desc' },
+			take: 30,
+			include: this.commentInclude(),
+			...(cursor && { cursor: { id: cursor }, skip: 1 })
+		}).then(comments => comments.map(c => this.transformComment(c, userId)))
+	}
+
+	private userSelect = {
+		select: { id: true, name: true, username: true, avatarUrl: true }
+	}
+
+	private repliesInclude(depth: number): any {
+		if (depth === 0) return false
+		return {
+			include: {
+				user: this.userSelect,
+				likes: { select: { id: true, userId: true } },
+				replies: this.repliesInclude(depth - 1),
+			},
+			orderBy: { createdAt: 'asc' as const }
+		}
+	}
+
+	private commentInclude() {
+		return {
+			user: this.userSelect,
+			likes: { select: { id: true, userId: true } },
+			replies: this.repliesInclude(3),
+		}
+	}
+
+	private transformComment(comment: any, userId?: string): any {
+		return {
+			...comment,
+			likeCount: comment.likes?.length ?? 0,
+			likedByUser: userId ? comment.likes?.some((l: any) => l.userId === userId) ?? false : false,
+			replies: comment.replies?.map((r: any) => this.transformComment(r, userId)) ?? [],
+		}
+	}
 }

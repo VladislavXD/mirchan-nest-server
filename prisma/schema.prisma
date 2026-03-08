@@ -238,6 +238,8 @@ model Comment {
   
   // Лайки комментария
   likes     Like[]
+  score     Int      @default(0) // Счёт лайков (можно кэшировать для производительности)
+
   
   // Ответы на комментарий (вложенные комментарии)
   replyTo   Comment?  @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: Cascade)

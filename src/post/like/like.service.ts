@@ -27,12 +27,14 @@ export class LikeService {
 						postId
 					}
 				},
+				
 				update: {}, // Если лайк уже есть, ничего не делаем
 				create: {
 					userId,
 					postId
 				}
 			})
+			
 
 			return like
 		} catch (err) {
@@ -89,24 +91,31 @@ export class LikeService {
 	 */
 	async likeComment(userId: string, commentId: string) {
 		try {
-			// Используем upsert для атомарной операции
-			const like = await this.prisma.like.upsert({
+			// Сначала проверяем, существует ли уже лайк
+			const existingLike = await this.prisma.like.findUnique({
 				where: {
-					userId_commentId: { // Используем составной уникальный индекс
-						userId,
-						commentId
-					}
-				},
-				update: {}, // Если лайк уже есть, ничего не делаем
-				create: {
-					userId,
-					commentId
+					userId_commentId: { userId, commentId }
 				}
 			})
 
+			// Если лайк уже есть — ничего не делаем
+			if (existingLike) {
+				return existingLike
+			}
+
+			// Создаём лайк и инкрементируем score атомарно
+			const [like] = await this.prisma.$transaction([
+				this.prisma.like.create({
+					data: { userId, commentId }
+				}),
+				this.prisma.comment.update({
+					where: { id: commentId },
+					data: { score: { increment: 1 } }
+				})
+			])
+
 			return like
 		} catch (err) {
-			// Проверяем, существует ли комментарий
 			const comment = await this.prisma.comment.findUnique({
 				where: { id: commentId },
 				select: { id: true }
@@ -116,7 +125,6 @@ export class LikeService {
 				throw new NotFoundException('Комментарий не найден')
 			}
 
-			// Если ошибка не в том, что комментарий не найден, пробрасываем дальше
 			console.error('Like comment error:', err)
 			throw new BadRequestException('Ошибка при постановке лайка на комментарий')
 		}
@@ -128,18 +136,19 @@ export class LikeService {
 	 */
 	async unlikeComment(userId: string, commentId: string) {
 		try {
-			// Используем deleteMany вместо findFirst + delete
 			const result = await this.prisma.like.deleteMany({
-				where: {
-					commentId,
-					userId
-				}
+				where: { commentId, userId }
 			})
 
-			// Если ничего не удалено, значит лайка не было
 			if (result.count === 0) {
 				throw new BadRequestException('Лайк не найден')
 			}
+
+			// Декрементируем score при снятии лайка
+			await this.prisma.comment.update({
+				where: { id: commentId },
+				data: { score: { decrement: 1 } }
+			})
 
 			return { message: 'Лайк успешно удален', count: result.count }
 		} catch (err) {

@@ -652,4 +652,6 @@ export class PostService {
 			console.error('Failed to sync views batch to database:', error)
 		}
 	}
+
+	
 }
