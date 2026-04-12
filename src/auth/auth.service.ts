@@ -6,6 +6,7 @@ import { generateAvatar } from '../libs/common/utils/generateAvatar';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { Request, Response } from 'express';
 import { LoginDto } from './dto/login.dto';
+import { JwtLoginDto } from './dto/jwt-login.dto';
 import { verify } from 'argon2';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +14,7 @@ import { ProviderService } from './provider/provider.service';
 import { EmailConfirmationService } from './email-confirmation/email-confirmation.service';
 import { TwoFactorAuthService } from './two-factor-auth/two-factor-auth.service';
 import { RedisService } from '../redis/redis.service';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
@@ -24,29 +26,36 @@ export class AuthService {
 		private readonly providerService: ProviderService,
 		private readonly emailConfirmationService: EmailConfirmationService,
 		private readonly twoFactorAuthService: TwoFactorAuthService,
-		private readonly redisService: RedisService
+		private readonly redisService: RedisService,
+		private readonly jwtService: JwtService
 	){}
 
+	/**
+	 * Регистрация пользователя (веб-приложение с сессией).
+	 * После регистрации пользователю нужно подтвердить email перед входом.
+	 * @param req - Объект запроса для сохранения сессии
+	 * @param dto - DTO с данными регистрации
+	 * @returns Сообщение об успешной регистрации
+	 */
 	public async register(req: Request, dto: RegisterDto){
-		const isExist = await  this.userService.findByEmail(dto.email)
+		const isExist = await this.userService.findByEmail(dto.email)
 
 		if(isExist){
-			throw new ConflictException(' Registration failed. User with this email already exists. Please use another email or sign in.')
+			throw new ConflictException('Registration failed. User with this email already exists. Please use another email or sign in.')
 		}
 
-	
-		const avatarName = `${dto.name}_${Date.now()}`;
-		const avatarBuffer = await generateAvatar(dto.name);
+		const avatarName = `${dto.name}_${Date.now()}`
+		const avatarBuffer = await generateAvatar(dto.name)
 
 		const uploadResult = await this.cloudinaryService.uploadBuffer(
 			avatarBuffer,
 			avatarName,
-						'mirchanAvatars'
-					);
+			'mirchanAvatars'
+		)
 
-		const avatarUrl = uploadResult.secure_url;
+		const avatarUrl = uploadResult.secure_url
 
-		const newUser  = await this.userService.create(
+		const newUser = await this.userService.create(
 			dto.email,
 			dto.password,
 			dto.name,
@@ -56,8 +65,9 @@ export class AuthService {
 		)
 		await this.emailConfirmationService.sendVerificationToken(newUser.email)
 		return { message: 'Вы успешно зарегестрировались. Пожалуйста, проверьте вашу электронную почту, чтобы подтвердить адрес и активировать аккаунт.'}
-
 	}
+
+	
 
 	public async login(req: Request, dto: LoginDto){
 		const user = await this.userService.findByEmail(dto.email)
@@ -208,7 +218,141 @@ export class AuthService {
 		})
 	}
 
+
+
+
+// --------------------------------Register callback route for Mobile Auth
+
+
+
+/**
+	 * Регистрация пользователя (мобильное приложение с JWT).
+	 * После регистрации возвращается JWT токен для немедленного входа.
+	 * @param dto - DTO с данными регистрации
+	 * @returns JWT токен и данные пользователя
+	 */
+	public async registerWithJwt(dto: RegisterDto) {
+		const isExist = await this.userService.findByEmail(dto.email)
+
+		if(isExist){
+			throw new ConflictException('Registration failed. User with this email already exists. Please use another email or sign in.')
+		}
+
+		const avatarName = `${dto.name}_${Date.now()}`
+		const avatarBuffer = await generateAvatar(dto.name)
+
+		const uploadResult = await this.cloudinaryService.uploadBuffer(
+			avatarBuffer,
+			avatarName,
+			'mirchanAvatars'
+		)
+
+		const avatarUrl = uploadResult.secure_url
+
+		const newUser = await this.userService.create(
+			dto.email,
+			dto.password,
+			dto.name,
+			AuthMethod.CREDENTIALS,
+			false,
+			avatarUrl
+		)
+
+		// Отправляем письмо с подтверждением
+		await this.emailConfirmationService.sendVerificationToken(newUser.email)
+
+		// Генерируем JWT токен для немедленного входа
+		const token = this.generateJwtToken(newUser.id)
+
+		// Кэшируем данные пользователя
+		try {
+			await this.redisService.cacheUserData(newUser.id, {
+				id: newUser.id,
+				name: newUser.username || newUser.name || 'Unknown',
+				email: newUser.email,
+				avatarUrl: newUser.avatarUrl,
+				lastSeen: newUser.lastSeen || new Date()
+			})
+		} catch (cacheError) {
+			console.error('Failed to cache user data:', cacheError)
+		}
+
+		return {
+			token,
+			user: newUser,
+			message: 'Вы успешно зарегестрировались. Пожалуйста, проверьте вашу электронную почту, чтобы подтвердить адрес.'
+		}
+	}
+
+
+	/**
+	 * Вход пользователя через JWT (мобильное приложение).
+	 * Вместо создания сессии, возвращается JWT токен.
+	 * @param dto - DTO с email и паролем
+	 * @returns Объект с JWT токеном и данными пользователя
+	 */
+	public async loginWithJwt(dto: JwtLoginDto) {
+		const user = await this.userService.findByEmail(dto.email)
+
+		if (!user || !user.password) {
+			throw new NotFoundException(
+				'Неверный email или пароль. Попробуйте еще раз или восстановите пароль.'
+			)
+		}
+
+		const isValidPassword = await verify(user.password, dto.password)
+
+		if (!isValidPassword) {
+			throw new NotFoundException(
+				'Неверный email или пароль. Попробуйте еще раз или восстановите пароль.'
+			)
+		}
+
+		if (!user.isVerified) {
+			await this.emailConfirmationService.sendVerificationToken(user.email)
+			throw new ConflictException(
+				'Ваш email не подтвержден. На ваш email был отправлен новый код подтверждения. Пожалуйста, подтвердите ваш email перед входом.'
+			)
+		}
+
+		// Генерируем JWT токен
+		const token = this.generateJwtToken(user.id)
+
+		// Кэшируем данные пользователя для Socket.IO
+		try {
+			await this.redisService.cacheUserData(user.id, {
+				id: user.id,
+				name: user.username || user.name || 'Unknown',
+				email: user.email,
+				avatarUrl: user.avatarUrl,
+				lastSeen: user.lastSeen || new Date()
+			})
+		} catch (cacheError) {
+			console.error('Failed to cache user data:', cacheError)
+			// Не прерываем логин из-за ошибки кэширования
+		}
+
+		return {
+			token,
+			user
+		}
+	}
+
+	/**
+	 * Генерирует JWT токен для пользователя.
+	 * @param userId - ID пользователя
+	 * @returns JWT токен
+	 */
+	private generateJwtToken(userId: string): string {
+		return this.jwtService.sign(
+			{ sub: userId }
+		)
+	}
+  
+
+
 }
+
 
 
 

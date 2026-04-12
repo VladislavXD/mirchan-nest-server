@@ -17,10 +17,12 @@ import { CommentModule } from './post/comment/comment.module';
 import { LikeModule } from './post/like/like.module';
 import { NewsModule } from './news/news.module';
 import { ForumModule } from './forum/forum.module';
-import { ChatModule } from './chat/chat.module';
+import { ChatModule } from './room/chat.module';
 import { AdminModule } from './admin/admin.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { NoticeModule } from './notice/notice.module';
+import { GroupModule } from './room/group/group.module';
+import { ChannelModule } from './room/channel/channel.module';
 
 
 
@@ -49,7 +51,9 @@ import { NoticeModule } from './notice/notice.module';
     ForumModule,
     ChatModule,
     AdminModule,
-    NoticeModule
+    NoticeModule,
+    GroupModule,
+    ChannelModule
   ],
 })
 export class AppModule {}

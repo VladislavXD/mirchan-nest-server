@@ -36,6 +36,12 @@ export class UserController {
 		return this.userService.findById(id)
 	}
 
+	@Authorization()
+	@HttpCode(HttpStatus.OK)
+	@Get('recomendatedUsers')
+	public async getRecomendatedUsers(@Authorized('id') userId: string) {
+		return this.userService.getRecomendedUsers(userId)
+	}
 
 	/**
 	 * Умный поиск пользователей

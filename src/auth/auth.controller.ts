@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import type { Request, Response } from 'express';
 import { LoginDto } from './dto/login.dto';
+import { JwtLoginDto } from './dto/jwt-login.dto';
 import { Recaptcha } from '@nestlab/google-recaptcha';
 import { ProviderService } from './provider/provider.service';
 import { ConfigService } from '@nestjs/config';
@@ -27,12 +28,38 @@ export class AuthController {
     return this.authService.register(req, dto)
   }
 
-
+  
   @Recaptcha()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   public async login(@Req() req: Request,@Body() dto: LoginDto){
     return this.authService.login(req, dto)
+  }
+  
+  /**
+   * Регистрация через JWT (мобильное приложение).
+   * Возвращает JWT токен для немедленного входа.
+   * @param dto - Данные регистрации
+   * @returns JWT токен и данные пользователя
+   */
+  @Recaptcha()
+  @Post('register-jwt')
+  @HttpCode(HttpStatus.OK)
+  public async registerWithJwt(@Body() dto: RegisterDto){
+    return this.authService.registerWithJwt(dto)
+  }
+
+  /**
+   * Вход через JWT (мобильное приложение).
+   * Возвращает JWT токен вместо создания сессии.
+   * @param dto - Email и пароль пользователя
+   * @returns JWT токен и данные пользователя
+   */
+  @Recaptcha()
+  @Post('login-jwt')
+  @HttpCode(HttpStatus.OK)
+  public async loginWithJwt(@Body() dto: JwtLoginDto){
+    return this.authService.loginWithJwt(dto)
   }
 
   	/**
@@ -105,14 +132,15 @@ export class AuthController {
     // Получаем полные данные пользователя
     const user = await this.userService.findById(userId);
     
-    // Возвращаем необходимые данные для Socket.IO Service
-    return {
+    console.log('[getCurrentUser] Returning user:', {
       id: user.id,
-      name: user.name,
       email: user.email,
-      avatarUrl: user.avatarUrl,
-      lastSeen: user.lastSeen
-    };
+      backgroundUrl: user.backgroundUrl,
+      status: user.status
+    });
+    
+    // Возвращаем все данные пользователя
+    return user;
   }
     
 

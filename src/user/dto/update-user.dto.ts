@@ -5,6 +5,8 @@ import { Transform } from 'class-transformer'
  * DTO для обновления данных пользователя.
  */
 export class UpdateUserDto {
+	// ============= АВАТАР =============
+
 	/**
 	 * Буфер файла аватарки (приходит из FileInterceptor).
 	 * Передается контроллером, не валидируется class-validator.
@@ -15,13 +17,31 @@ export class UpdateUserDto {
 	 * Исходное имя загруженного файла.
 	 */
 	avatarOriginalFilename?: string
+
 	/**
-	 * Имя пользователя.
+	 * URL фрейма аватарки (декорация вокруг аватара).
+	 */
+	@IsOptional()
+	@IsString({ message: 'avatarFrameUrl должен быть строкой' })
+	avatarFrameUrl?: string
+
+	// ============= ОСНОВНАЯ ИНФОРМАЦИЯ =============
+
+	/**
+	 * Имя пользователя (full name).
 	 * @example Иван Иванов
 	 */
 	@IsOptional()
 	@IsString({ message: 'Имя должно быть строкой.' })
 	name?: string
+
+	/**
+	 * Уникальное имя пользователя (username).
+	 * @example ivan_ivanov
+	 */
+	@IsOptional()
+	@IsString({ message: 'Имя пользователя должно быть строкой' })
+	username?: string
 
 	/**
 	 * Email пользователя.
@@ -31,6 +51,55 @@ export class UpdateUserDto {
 	@IsString({ message: 'Email должен быть строкой.' })
 	@IsEmail({}, { message: 'Некорректный формат email.' })
 	email?: string
+
+	/**
+	 * Дата рождения пользователя.
+	 * @example 1990-01-15
+	 */
+	@IsOptional()
+	dateOfBirth?: Date
+
+	/**
+	 * Географическое местоположение пользователя.
+	 * @example Москва, Россия
+	 */
+	@IsOptional()
+	@IsString({ message: 'Локация должна быть строкой' })
+	location?: string
+
+	// ============= ПЕРСОНАЛИЗАЦИЯ ПРОФИЛЯ =============
+
+	/**
+	 * Биография пользователя (описание профиля).
+	 * @example Разработчик Flutter | Увлекаюсь путешествиями
+	 */
+	@IsOptional()
+	@IsString({ message: 'Биография должна быть строкой' })
+	bio?: string
+
+	/**
+	 * Статус пользователя (текущее настроение/активность).
+	 * @example 🎮 Играю в видеоигры
+	 */
+	@IsOptional()
+	@IsString({ message: 'Статус должен быть строкой' })
+	status?: string
+
+	/**
+	 * URL фонового изображения профиля.
+	 */
+	@IsOptional()
+	@IsString({ message: 'backgroundUrl должен быть строкой' })
+	backgroundUrl?: string
+
+	/**
+	 * URL фрейма имени пользователя (декорация вокруг username).
+	 */
+	@IsOptional()
+	@IsString({ message: 'usernameFrameUrl должен быть строкой' })
+	usernameFrameUrl?: string
+
+	// ============= БЕЗОПАСНОСТЬ =============
 
 	/**
 	 * Флаг, указывающий, включена ли двухфакторная аутентификация.
@@ -49,38 +118,4 @@ export class UpdateUserDto {
 	})
 	@IsBoolean({ message: 'isTwoFactorEnabled должно быть булевым значением.' })
 	isTwoFactorEnabled?: boolean
-
-
-	@IsOptional()
-	dateOfBirth?: Date
-
-	@IsOptional()
-	@IsString({message: 'Биография должна быть строкой'})
-	bio?: string
-
-	@IsOptional()
-	@IsString({message: 'Статус должен быть строкой'})
-	status?: string
-
-	@IsOptional()
-	@IsString({message: 'Имя пользователя должно быть строкой'})
-	username?: string
-
-	@IsOptional()
-	@IsString({message: 'backgroundUrl должен быть строкой'})
-	backgroundUrl?: string
-
-	@IsOptional()
-	@IsString({message: 'usernameFrameUrl должен быть строкой'})
-	usernameFrameUrl?: string
-
-	@IsOptional()
-	@IsString({message: 'avatarFrameUrl должен быть строкой'})
-	avatarFrameUrl?: string
-
-	@IsOptional()
-	@IsString({message: 'локация должна быть строкой'})
-	location?: string
-
-
 }
