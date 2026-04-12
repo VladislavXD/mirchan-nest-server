@@ -248,7 +248,33 @@ export class UserService {
 	}
 
 
-	
+	public async getRecomendedUsers(userId: string){
+		const user = await this.findById(userId)
+
+		const followingIds = user.following.map(f => f.id)
+
+		const recomended = await this.prismaService.user.findMany({
+			where: {
+				id: {
+					notIn: [...followingIds, userId]
+				}
+			},
+			take: 15,
+			select: {
+				id: true,
+				name: true,
+				username: true,
+				avatarUrl: true,
+			}
+		})
+
+		return recomended.map(u => ({
+			id: u.id,
+			name: u.name,
+			username: u.username,
+			avatarUrl: u.avatarUrl,
+		}))
+	}
 
 	/**
 	 * Умный поиск пользователей с нормализацией Unicode

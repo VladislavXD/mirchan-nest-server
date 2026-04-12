@@ -13,6 +13,8 @@ import { EmailConfirmationModule } from './email-confirmation/email-confirmation
 import { MailService } from '../libs/mail/mail.service';
 import { TwoFactorAuthService } from './two-factor-auth/two-factor-auth.service';
 import { PasswordRecoveryModule } from './password-recovery/password-recovery.module';
+import { JwtModule } from '@nestjs/jwt';
+import { getJwtConfig } from '../config/jwt.config';
 
 
 @Module({
@@ -21,6 +23,12 @@ import { PasswordRecoveryModule } from './password-recovery/password-recovery.mo
     ProviderModule.registerAsync({
       imports: [ConfigModule],
       useFactory: getProvidersConfig,
+      inject: [ConfigService]
+    }),
+
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: getJwtConfig,
       inject: [ConfigService]
     }),
 
@@ -36,6 +44,6 @@ import { PasswordRecoveryModule } from './password-recovery/password-recovery.mo
   ],
   controllers: [AuthController],
   providers: [AuthService, UserService, MailService, TwoFactorAuthService],
-  exports: [AuthService]
+  exports: [AuthService, JwtModule]
 })
 export class AuthModule {}

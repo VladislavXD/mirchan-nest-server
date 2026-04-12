@@ -41,13 +41,12 @@ model User {
   modActions         ModAction[] @relation("ModActions")
   bansMade           Ban[]       @relation("BansMade")
   accounts           Account[]
+  chats              Chat[]      @relation("ChatParticipants")
+  adminChats         Chat[]      @relation("ChatAdmins")
+  sentMessages       Message[]   @relation("SentMessages")
 
   @@map("users")
 }
-
-
-
-
 
 model Account {
   id String @id @default(uuid())
@@ -99,7 +98,6 @@ enum AuthMethod {
   YANDEX
 }
 
-
 model Repost {
   id        String   @id @default(uuid())
   userId    String
@@ -107,7 +105,6 @@ model Repost {
   createdAt DateTime @default(now())
 
   repostComment String? // Комментарий при репосте (опционально)
-  
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -116,6 +113,7 @@ model Repost {
   @@index([userId])
   @@index([postId])
 }
+
 model Notice {
   id        String   @id @default(uuid())
   userId    String
@@ -124,8 +122,9 @@ model Notice {
   content   String
   createdAt DateTime @default(now())
   expiredAt DateTime @default(now())
-  active   Boolean  @default(true)
-  type     String
+  active    Boolean  @default(true)
+  type      String
+
   @@index([userId])
 }
 
@@ -153,23 +152,22 @@ model Post {
   likes          Like[]
   views          String[]    @default([]) // Массив UUID пользователей, просмотревших пост
   comments       Comment[]
-  reposts        Repost[]   // Обратная связь для репостов
+  reposts        Repost[] // Обратная связь для репостов
   savedBy        User[]      @relation("SavedPosts") // Обратная связь для сохранённых постов
-  repostCount     Int         @default(0) // Количество репостов
-  
-  
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @default(now()) @updatedAt
-  isEdited        Boolean     @default(false) 
+  repostCount    Int         @default(0) // Количество репостов
 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  isEdited  Boolean  @default(false)
 
   @@index([authorId])
   @@index([createdAt])
 }
 
 model MediaFile {
-  id         String    @id @default(uuid())
-  url        String // URL файла в Cloudinary
+  id  String @id @default(uuid())
+  url String // URL файла в Cloudinary
+
   publicId   String // Public ID в Cloudinary для удаления
   previewUrl String? // URL превью/thumbnail
   name       String? // Оригинальное имя файла
@@ -183,12 +181,17 @@ model MediaFile {
   nsfw       Boolean   @default(false) // NSFW контент
 
   // Связи с разными сущностями
-  postId   String?
-  post     Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId String?
+  post   Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
   threadId String?
   thread   Thread? @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  replyId  String?
-  reply    Reply?  @relation(fields: [replyId], references: [id], onDelete: Cascade)
+
+  replyId String?
+  reply   Reply?  @relation(fields: [replyId], references: [id], onDelete: Cascade)
+
+  messageId String?
+  message   Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -196,6 +199,7 @@ model MediaFile {
   @@index([threadId])
   @@index([replyId])
   @@index([type])
+  @@index([messageId])
 }
 
 enum MediaType {
@@ -204,20 +208,18 @@ enum MediaType {
   GIF
 }
 
-
-
 model Like {
-  id        String   @id @default(uuid())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  
+  id     String @id @default(uuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
   // Лайк может быть либо для поста, либо для комментария
-  post      Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
-  postId    String?
-  
+  post   Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId String?
+
   comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
   commentId String?
-  
+
   createdAt DateTime @default(now())
 
   @@unique([userId, postId])
@@ -228,56 +230,29 @@ model Like {
 }
 
 model Comment {
-  id        String   @id @default(uuid())
-  content   String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  postId    String
-  
-  // Лайки комментария
-  likes     Like[]
-  score     Int      @default(0) // Счёт лайков (можно кэшировать для производительности)
+  id      String @id @default(uuid())
+  content String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  String
 
-  
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId String
+
+  // Лайки комментария
+  likes Like[]
+  score Int    @default(0) // Счёт лайков (можно кэшировать для производительности)
+
   // Ответы на комментарий (вложенные комментарии)
   replyTo   Comment?  @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: Cascade)
   replyToId String?
   replies   Comment[] @relation("CommentReplies")
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
   @@index([userId])
   @@index([postId])
   @@index([replyToId])
-}
-
-model Chat {
-  id            String    @id @default(uuid())
-  participants  String[] // Массив UUID участников чата
-  lastMessage   String? // Последнее сообщение для превью
-  lastMessageAt DateTime? // Время последнего сообщения
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  messages      Message[]
-
-  @@index([lastMessageAt])
-}
-
-model Message {
-  id        String   @id @default(uuid())
-  content   String
-  senderId  String
-  chatId    String
-  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-
-  @@index([chatId])
-  @@index([senderId])
 }
 
 // Shared media model for Posts, Threads, and Replies
@@ -291,8 +266,8 @@ model Board {
   allowedFileTypes String[] @default(["jpg", "jpeg", "png", "gif", "webp", "webm", "mp4"])
   postsPerPage     Int      @default(15)
   threadsPerPage   Int      @default(10)
-  bumpLimit        Int      @default(500) 
-  imageLimit       Int      @default(150) 
+  bumpLimit        Int      @default(500)
+  imageLimit       Int      @default(150)
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
 
@@ -477,4 +452,53 @@ model ThreadTag {
   @@unique([threadId, tagId])
   @@index([threadId])
   @@index([tagId])
+}
+
+// user social interactions: чаты и сообщения. группы. каналы
+
+enum ChatType {
+  DIRECT
+  GROUP
+  CHANNEL
+}
+
+model Chat {
+  id   String   @id @default(uuid())
+  type ChatType // Тип чата
+
+  lastMessage   String? // Последнее сообщение для превью
+  lastMessageAt DateTime? // Время последнего сообщения
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+
+  name         String? // Для групп и каналов
+  description  String? // Для групп и каналов
+  avatarUrl    String? // Для групп и каналов
+  isPrivate    Boolean  @default(false) // Для групп и каналов
+
+  participants User[] @relation("ChatParticipants")
+  admins       User[] @relation("ChatAdmins") // Для групп и каналов
+
+  @@index([lastMessageAt])
+}
+
+model Message {
+  id      String @id @default(uuid())
+  content String
+
+  chatId String
+  chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  senderId String
+  sender   User   @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  Media     MediaFile[] // Массив медиа файлов для сообщений
+  isRead    Boolean     @default(false)
+  createdAt DateTime    @default(now())
+
+  @@index([chatId])
+  @@index([senderId])
 }

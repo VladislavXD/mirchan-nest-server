@@ -22,7 +22,6 @@ import { parseBoolean } from './libs/common/utils/parse-boolean.util';
  */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
   // Приложение работает за прокси (Vercel) — доверяем прокси,
   // чтобы express/express-session корректно определяли протокол (https) и заголовки.
   const expressApp = app.getHttpAdapter().getInstance() as any;

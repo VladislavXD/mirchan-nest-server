@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, HttpException, Http
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { ChatType } from '@prisma/client';
 
 @Injectable()
 export class ChatService {
@@ -23,6 +24,7 @@ export class ChatService {
     try {
       const chats = await this.prismaService.chat.findMany({
         where: {
+          type: ChatType.DIRECT,
           participants: {
             some: { id: userId }
           }
@@ -147,6 +149,7 @@ export class ChatService {
       // Ищем существующий чат между пользователями (теперь participants это массив объектов)
       let chat = await this.prismaService.chat.findFirst({
         where: {
+          type: ChatType.DIRECT,
           AND: [
             { participants: { some: { id: userId } } },
             { participants: { some: { id: targetUserId } } }

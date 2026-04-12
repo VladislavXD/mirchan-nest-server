@@ -7,6 +7,12 @@ CREATE TYPE "UserRole" AS ENUM ('REGULAR', 'ADMIN');
 -- CreateEnum
 CREATE TYPE "AuthMethod" AS ENUM ('CREDENTIALS', 'GOOGLE', 'GITHUB', 'YANDEX');
 
+-- CreateEnum
+CREATE TYPE "MediaType" AS ENUM ('IMAGE', 'VIDEO', 'GIF');
+
+-- CreateEnum
+CREATE TYPE "ChatType" AS ENUM ('DIRECT', 'GROUP', 'CHANNEL');
+
 -- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
@@ -64,16 +70,27 @@ CREATE TABLE "tokens" (
 );
 
 -- CreateTable
+CREATE TABLE "Repost" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "postId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "repostComment" TEXT,
+
+    CONSTRAINT "Repost_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Notice" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
+    "title" TEXT,
+    "emojiUrl" TEXT,
     "content" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expiredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "type" TEXT NOT NULL,
-    "title" TEXT,
-    "emojiUrl" TEXT,
 
     CONSTRAINT "Notice_pkey" PRIMARY KEY ("id")
 );
@@ -91,12 +108,15 @@ CREATE TABLE "Follows" (
 -- CreateTable
 CREATE TABLE "Post" (
     "id" TEXT NOT NULL,
-    "content" TEXT NOT NULL,
-    "imageUrl" TEXT,
-    "emojiUrls" TEXT[],
+    "content" JSONB NOT NULL,
+    "contentSpoiler" BOOLEAN NOT NULL DEFAULT false,
+    "emojiUrls" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "authorId" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "views" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "repostCount" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "isEdited" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "Post_pkey" PRIMARY KEY ("id")
 );
@@ -106,16 +126,20 @@ CREATE TABLE "MediaFile" (
     "id" TEXT NOT NULL,
     "url" TEXT NOT NULL,
     "publicId" TEXT NOT NULL,
+    "previewUrl" TEXT,
     "name" TEXT,
     "size" INTEGER,
-    "type" TEXT NOT NULL,
     "mimeType" TEXT NOT NULL,
-    "thumbnailUrl" TEXT,
+    "type" "MediaType" NOT NULL,
     "width" INTEGER,
     "height" INTEGER,
     "duration" INTEGER,
+    "spoiler" BOOLEAN NOT NULL DEFAULT false,
+    "nsfw" BOOLEAN NOT NULL DEFAULT false,
+    "postId" TEXT,
     "threadId" TEXT,
     "replyId" TEXT,
+    "messageId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "MediaFile_pkey" PRIMARY KEY ("id")
@@ -125,7 +149,8 @@ CREATE TABLE "MediaFile" (
 CREATE TABLE "Like" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "postId" TEXT NOT NULL,
+    "postId" TEXT,
+    "commentId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Like_pkey" PRIMARY KEY ("id")
@@ -137,33 +162,12 @@ CREATE TABLE "Comment" (
     "content" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "postId" TEXT NOT NULL,
+    "score" INTEGER NOT NULL DEFAULT 0,
+    "replyToId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Comment_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Chat" (
-    "id" TEXT NOT NULL,
-    "lastMessage" TEXT,
-    "lastMessageAt" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    "participants" TEXT[],
-
-    CONSTRAINT "Chat_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Message" (
-    "id" TEXT NOT NULL,
-    "content" TEXT NOT NULL,
-    "senderId" TEXT NOT NULL,
-    "chatId" TEXT NOT NULL,
-    "isRead" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -305,11 +309,62 @@ CREATE TABLE "ThreadTag" (
     CONSTRAINT "ThreadTag_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Chat" (
+    "id" TEXT NOT NULL,
+    "type" "ChatType" NOT NULL,
+    "lastMessage" TEXT,
+    "lastMessageAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Chat_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Message" (
+    "id" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "chatId" TEXT NOT NULL,
+    "senderId" TEXT NOT NULL,
+    "isRead" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "_SavedPosts" (
+    "A" TEXT NOT NULL,
+    "B" TEXT NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "_ChatParticipants" (
+    "A" TEXT NOT NULL,
+    "B" TEXT NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "_ChatAdmins" (
+    "A" TEXT NOT NULL,
+    "B" TEXT NOT NULL
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "tokens_token_key" ON "tokens"("token");
+
+-- CreateIndex
+CREATE INDEX "Repost_userId_idx" ON "Repost"("userId");
+
+-- CreateIndex
+CREATE INDEX "Repost_postId_idx" ON "Repost"("postId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Repost_userId_postId_key" ON "Repost"("userId", "postId");
 
 -- CreateIndex
 CREATE INDEX "Notice_userId_idx" ON "Notice"("userId");
@@ -330,10 +385,19 @@ CREATE INDEX "Post_authorId_idx" ON "Post"("authorId");
 CREATE INDEX "Post_createdAt_idx" ON "Post"("createdAt");
 
 -- CreateIndex
+CREATE INDEX "MediaFile_postId_idx" ON "MediaFile"("postId");
+
+-- CreateIndex
 CREATE INDEX "MediaFile_threadId_idx" ON "MediaFile"("threadId");
 
 -- CreateIndex
 CREATE INDEX "MediaFile_replyId_idx" ON "MediaFile"("replyId");
+
+-- CreateIndex
+CREATE INDEX "MediaFile_type_idx" ON "MediaFile"("type");
+
+-- CreateIndex
+CREATE INDEX "MediaFile_messageId_idx" ON "MediaFile"("messageId");
 
 -- CreateIndex
 CREATE INDEX "Like_userId_idx" ON "Like"("userId");
@@ -342,7 +406,13 @@ CREATE INDEX "Like_userId_idx" ON "Like"("userId");
 CREATE INDEX "Like_postId_idx" ON "Like"("postId");
 
 -- CreateIndex
+CREATE INDEX "Like_commentId_idx" ON "Like"("commentId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Like_userId_postId_key" ON "Like"("userId", "postId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Like_userId_commentId_key" ON "Like"("userId", "commentId");
 
 -- CreateIndex
 CREATE INDEX "Comment_userId_idx" ON "Comment"("userId");
@@ -351,13 +421,7 @@ CREATE INDEX "Comment_userId_idx" ON "Comment"("userId");
 CREATE INDEX "Comment_postId_idx" ON "Comment"("postId");
 
 -- CreateIndex
-CREATE INDEX "Chat_lastMessageAt_idx" ON "Chat"("lastMessageAt");
-
--- CreateIndex
-CREATE INDEX "Message_chatId_idx" ON "Message"("chatId");
-
--- CreateIndex
-CREATE INDEX "Message_senderId_idx" ON "Message"("senderId");
+CREATE INDEX "Comment_replyToId_idx" ON "Comment"("replyToId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Board_name_key" ON "Board"("name");
@@ -446,8 +510,41 @@ CREATE INDEX "ThreadTag_tagId_idx" ON "ThreadTag"("tagId");
 -- CreateIndex
 CREATE UNIQUE INDEX "ThreadTag_threadId_tagId_key" ON "ThreadTag"("threadId", "tagId");
 
+-- CreateIndex
+CREATE INDEX "Chat_lastMessageAt_idx" ON "Chat"("lastMessageAt");
+
+-- CreateIndex
+CREATE INDEX "Message_chatId_idx" ON "Message"("chatId");
+
+-- CreateIndex
+CREATE INDEX "Message_senderId_idx" ON "Message"("senderId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "_SavedPosts_AB_unique" ON "_SavedPosts"("A", "B");
+
+-- CreateIndex
+CREATE INDEX "_SavedPosts_B_index" ON "_SavedPosts"("B");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "_ChatParticipants_AB_unique" ON "_ChatParticipants"("A", "B");
+
+-- CreateIndex
+CREATE INDEX "_ChatParticipants_B_index" ON "_ChatParticipants"("B");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "_ChatAdmins_AB_unique" ON "_ChatAdmins"("A", "B");
+
+-- CreateIndex
+CREATE INDEX "_ChatAdmins_B_index" ON "_ChatAdmins"("B");
+
 -- AddForeignKey
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Repost" ADD CONSTRAINT "Repost_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Repost" ADD CONSTRAINT "Repost_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Follows" ADD CONSTRAINT "Follows_followerId_fkey" FOREIGN KEY ("followerId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -459,25 +556,34 @@ ALTER TABLE "Follows" ADD CONSTRAINT "Follows_followingId_fkey" FOREIGN KEY ("fo
 ALTER TABLE "Post" ADD CONSTRAINT "Post_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "MediaFile" ADD CONSTRAINT "MediaFile_replyId_fkey" FOREIGN KEY ("replyId") REFERENCES "Reply"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "MediaFile" ADD CONSTRAINT "MediaFile_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "MediaFile" ADD CONSTRAINT "MediaFile_threadId_fkey" FOREIGN KEY ("threadId") REFERENCES "Thread"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Like" ADD CONSTRAINT "Like_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "MediaFile" ADD CONSTRAINT "MediaFile_replyId_fkey" FOREIGN KEY ("replyId") REFERENCES "Reply"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "MediaFile" ADD CONSTRAINT "MediaFile_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "Message"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Like" ADD CONSTRAINT "Like_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Comment" ADD CONSTRAINT "Comment_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Like" ADD CONSTRAINT "Like_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Like" ADD CONSTRAINT "Like_commentId_fkey" FOREIGN KEY ("commentId") REFERENCES "Comment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Comment" ADD CONSTRAINT "Comment_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_replyToId_fkey" FOREIGN KEY ("replyToId") REFERENCES "Comment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Thread" ADD CONSTRAINT "Thread_boardId_fkey" FOREIGN KEY ("boardId") REFERENCES "Board"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -501,7 +607,31 @@ ALTER TABLE "Ban" ADD CONSTRAINT "Ban_moderatorId_fkey" FOREIGN KEY ("moderatorI
 ALTER TABLE "Categories" ADD CONSTRAINT "Categories_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "Categories"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
+ALTER TABLE "ThreadTag" ADD CONSTRAINT "ThreadTag_threadId_fkey" FOREIGN KEY ("threadId") REFERENCES "Thread"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "ThreadTag" ADD CONSTRAINT "ThreadTag_tagId_fkey" FOREIGN KEY ("tagId") REFERENCES "Tag"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "ThreadTag" ADD CONSTRAINT "ThreadTag_threadId_fkey" FOREIGN KEY ("threadId") REFERENCES "Thread"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Message" ADD CONSTRAINT "Message_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Message" ADD CONSTRAINT "Message_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_SavedPosts" ADD CONSTRAINT "_SavedPosts_A_fkey" FOREIGN KEY ("A") REFERENCES "Post"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_SavedPosts" ADD CONSTRAINT "_SavedPosts_B_fkey" FOREIGN KEY ("B") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ChatParticipants" ADD CONSTRAINT "_ChatParticipants_A_fkey" FOREIGN KEY ("A") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ChatParticipants" ADD CONSTRAINT "_ChatParticipants_B_fkey" FOREIGN KEY ("B") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ChatAdmins" ADD CONSTRAINT "_ChatAdmins_A_fkey" FOREIGN KEY ("A") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ChatAdmins" ADD CONSTRAINT "_ChatAdmins_B_fkey" FOREIGN KEY ("B") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
