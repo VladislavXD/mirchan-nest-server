@@ -20,78 +20,63 @@ import { parseBoolean } from './libs/common/utils/parse-boolean.util';
  * @function bootstrap
  * @returns {Promise<void>} Промис, который разрешается, когда приложение запущено.
  */
-
-let cachedServer: any;
-
 async function bootstrap() {
-  if (!cachedServer) {
-    const app = await NestFactory.create(AppModule);
-    const expressApp = app.getHttpAdapter().getInstance() as any;
-    expressApp.set('trust proxy', true);
+  const app = await NestFactory.create(AppModule);
+  // Приложение работает за прокси (Vercel) — доверяем прокси,
+  // чтобы express/express-session корректно определяли протокол (https) и заголовки.
+  const expressApp = app.getHttpAdapter().getInstance() as any;
+  expressApp.set('trust proxy', true);
 
-    const config = app.get(ConfigService);
-    const redis = createClient({
-      url: config.getOrThrow<string>('REDIS_URI'),
-    });
-    await redis.connect();
+  const config = app.get(ConfigService);
+  // Подключение node-redis (connect-redis v9 не поддерживает ioredis)
+  const redis = createClient({
+    url: config.getOrThrow<string>('REDIS_URI'),
+  });
+  await redis.connect();
 
-    const sessionDomain = config.get<string>('SESSION_DOMAIN');
-    app.use(
-      session({
-        secret: config.getOrThrow<string>('SESSION_SECRET'),
-        name: config.getOrThrow<string>('SESSION_NAME'),
-        resave: true,
-        saveUninitialized: false,
-        cookie: {
-          ...(sessionDomain && sessionDomain.trim()
-            ? { domain: sessionDomain }
-            : {}),
-          maxAge: ms(config.getOrThrow<StringValue>('SESSION_MAX_AGE')),
-          httpOnly: parseBoolean(config.getOrThrow<string>('SESSION_HTTP_ONLY')),
-          secure: parseBoolean(config.getOrThrow<string>('SESSION_SECURE')),
-          sameSite: config.getOrThrow<'lax' | 'strict' | 'none' | boolean>('SESSION_SAME_SITE'),
-        },
-        store: new RedisStore({
-          client: redis,
-          prefix: config.getOrThrow<string>('SESSION_FOLDER'),
-          ttl: ms(config.getOrThrow<StringValue>('SESSION_MAX_AGE')) / 1000,
-        }),
+  // Получаем SESSION_DOMAIN, если пустой - не устанавливаем (браузер будет использовать текущий origin)
+  // Для передачи кук на субдомены (например, socket.mirchan.site) нужно установить domain: '.mirchan.site'
+  const sessionDomain = config.get<string>('SESSION_DOMAIN');
+  app.use(
+    session({
+      secret: config.getOrThrow<string>('SESSION_SECRET'),
+      name: config.getOrThrow<string>('SESSION_NAME'),
+      resave: true,
+      saveUninitialized: false,
+      cookie: {
+        ...(sessionDomain && sessionDomain.trim()
+          ? { domain: sessionDomain }
+          : {}),
+        maxAge: ms(config.getOrThrow<StringValue>('SESSION_MAX_AGE')),
+        httpOnly: parseBoolean(config.getOrThrow<string>('SESSION_HTTP_ONLY')),
+        secure: parseBoolean(config.getOrThrow<string>('SESSION_SECURE')),
+        sameSite: config.getOrThrow<'lax' | 'strict' | 'none' | boolean>(   'SESSION_SAME_SITE'),
+      },
+      store: new RedisStore({
+        client: redis,
+        prefix: config.getOrThrow<string>('SESSION_FOLDER'),
+        ttl: ms(config.getOrThrow<StringValue>('SESSION_MAX_AGE')) / 1000,
+        // Можно настроить ttl вручную если нужно: ttl: 60 * 60 * 24
       }),
-    );
+    }),
+  );
 
-    app.useGlobalPipes(
-      new ValidationPipe({
-        transform: true,
-      }),
-    );
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+    }),
+  );
 
-    app.enableCors({
-      origin: config.getOrThrow<string>('ALLOWED_ORIGIN'),
-      credentials: true,
-      exposedHeaders: ['Set-Cookie', 'set-cookie'],
-    });
+  app.enableCors({
+    // Настройки CORS для приложения
+    origin: config.getOrThrow<string>('ALLOWED_ORIGIN'),
+    credentials: true,
+    // экспонируем Set-Cookie чтобы браузер и прокси могли увидеть заголовок
+    exposedHeaders: ['Set-Cookie', 'set-cookie'],
+  });
 
-    if (process.env.NODE_ENV === 'production') {
-      // Инициализируем без прослушивания порта для Vercel Serverless
-      await app.init();
-    } else {
-      // Запускаем сервер на порту для локальной разработки
-      await app.listen(config.getOrThrow<number>('APPLICATION_PORT'));
-    }
-    
-    cachedServer = expressApp;
-  }
-
-  return cachedServer;
+  await app.listen(config.getOrThrow<number>('APPLICATION_PORT'));
 }
 
-// Запуск локально
-if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
-  bootstrap();
-}
-
-// Экспорт для Vercel
-export default async function (req: any, res: any) {
-  const server = await bootstrap();
-  return server(req, res);
-}
+// Для Vercel serverless functions экспортируем приложение
+bootstrap()
