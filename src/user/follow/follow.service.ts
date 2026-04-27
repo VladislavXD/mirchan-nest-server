@@ -1,212 +1,237 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationService } from 'src/notification/notification.service';
 
 @Injectable()
 export class FollowService {
-	public constructor(
-		private readonly prismaService: PrismaService
-	) {}
+  public constructor(
+    private readonly prismaService: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
-	/**
-	 * Подписаться на пользователя
-	 */
-	public async followUser(followerId: string, followingId: string) {
-		// Проверка: нельзя подписаться на самого себя
-		if (followerId === followingId) {
-			throw new BadRequestException('You cannot follow yourself');
-		}
+  /**
+   * Подписаться на пользователя
+   */
+  public async followUser(followerId: string, followingId: string) {
+    // Проверка: нельзя подписаться на самого себя
+    if (followerId === followingId) {
+      throw new BadRequestException('You cannot follow yourself');
+    }
 
-		// Проверяем существование пользователя, на которого подписываются
-		const userToFollow = await this.prismaService.user.findUnique({
-			where: { id: followingId }
-		});
+    // Проверяем существование пользователя, на которого подписываются
+    const userToFollow = await this.prismaService.user.findUnique({
+      where: { id: followingId },
+    });
 
-		if (!userToFollow) {
-			throw new NotFoundException('User not found');
-		}
+    if (!userToFollow) {
+      throw new NotFoundException('User not found');
+    }
 
-		// Проверяем, не подписан ли уже
-		const existingFollow = await this.prismaService.follows.findUnique({
-			where: {
-				followerId_followingId: {
-					followerId,
-					followingId
-				}
-			}
-		});
+    // Проверяем, не подписан ли уже
+    const existingFollow = await this.prismaService.follows.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId,
+          followingId,
+        },
+      },
+    });
 
-		if (existingFollow) {
-			throw new ConflictException('Already following this user');
-		}
+    if (existingFollow) {
+      throw new ConflictException('Already following this user');
+    }
 
-		// Создаем подписку
-		const follow = await this.prismaService.follows.create({
-			data: {
-				followerId,
-				followingId
-			},
-			include: {
-				following: {
-					select: {
-						id: true,
-						username: true,
-						name: true,
-						avatarUrl: true,
-						bio: true
-					}
-				}
-			}
-		});
+    // Создаем подписку
+    const follow = await this.prismaService.follows.create({
+      data: {
+        followerId,
+        followingId,
+      },
+      include: {
+        following: {
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            avatarUrl: true,
+            bio: true,
+          },
+        },
+      },
+    });
+    if (follow) {
+      await this.notificationService.createNotification({
+        userId: followingId,
+        type: 'NEW_FOLLOWER',
+        issuerId: followerId,
+      });
+    }
 
-		return {
-			message: 'Successfully followed user',
-			follow
-		};
-	}
+    return {
+      message: 'Successfully followed user',
+      follow,
+    };
+  }
 
-	/**
-	 * Отписаться от пользователя
-	 */
-	public async unfollowUser(followerId: string, followingId: string) {
-		// Проверяем, существует ли подписка
-		const existingFollow = await this.prismaService.follows.findUnique({
-			where: {
-				followerId_followingId: {
-					followerId,
-					followingId
-				}
-			}
-		});
+  /**
+   * Отписаться от пользователя
+   */
+  public async unfollowUser(followerId: string, followingId: string) {
+    // Проверяем, существует ли подписка
+    const existingFollow = await this.prismaService.follows.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId,
+          followingId,
+        },
+      },
+    });
 
-		if (!existingFollow) {
-			throw new NotFoundException('You are not following this user');
-		}
+    if (!existingFollow) {
+      throw new NotFoundException('You are not following this user');
+    }
 
-		// Удаляем подписку
-		await this.prismaService.follows.delete({
-			where: {
-				followerId_followingId: {
-					followerId,
-					followingId
-				}
-			}
-		});
+    // Удаляем подписку
+    await this.prismaService.follows.delete({
+      where: {
+        followerId_followingId: {
+          followerId,
+          followingId,
+        },
+      },
+    });
 
-		return {
-			message: 'Successfully unfollowed user'
-		};
-	}
+    return {
+      message: 'Successfully unfollowed user',
+    };
+  }
 
-	/**
-	 * Получить список подписчиков пользователя
-	 */
-	public async getFollowers(userId: string, page: number = 1, limit: number = 20) {
-		const skip = (page - 1) * limit;
+  /**
+   * Получить список подписчиков пользователя
+   */
+  public async getFollowers(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    const skip = (page - 1) * limit;
 
-		const [followers, total] = await Promise.all([
-			this.prismaService.follows.findMany({
-				where: { followingId: userId },
-				skip,
-				take: limit,
-				include: {
-					follower: {
-						select: {
-							id: true,
-							username: true,
-							name: true,
-							avatarUrl: true,
-							bio: true,
-							isVerified: true
-						}
-					}
-				},
-				orderBy: { createdAt: 'desc' }
-			}),
-			this.prismaService.follows.count({
-				where: { followingId: userId }
-			})
-		]);
+    const [followers, total] = await Promise.all([
+      this.prismaService.follows.findMany({
+        where: { followingId: userId },
+        skip,
+        take: limit,
+        include: {
+          follower: {
+            select: {
+              id: true,
+              username: true,
+              name: true,
+              avatarUrl: true,
+              bio: true,
+              isVerified: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prismaService.follows.count({
+        where: { followingId: userId },
+      }),
+    ]);
 
-		return {
-			followers: followers.map(f => f.follower),
-			total,
-			page,
-			limit,
-			totalPages: Math.ceil(total / limit)
-		};
-	}
+    return {
+      followers: followers.map((f) => f.follower),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
 
-	/**
-	 * Получить список подписок пользователя
-	 */
-	public async getFollowing(userId: string, page: number = 1, limit: number = 20) {
-		const skip = (page - 1) * limit;
+  /**
+   * Получить список подписок пользователя
+   */
+  public async getFollowing(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    const skip = (page - 1) * limit;
 
-		const [following, total] = await Promise.all([
-			this.prismaService.follows.findMany({
-				where: { followerId: userId },
-				skip,
-				take: limit,
-				include: {
-					following: {
-						select: {
-							id: true,
-							username: true,
-							name: true,
-							avatarUrl: true,
-							bio: true,
-							isVerified: true
-						}
-					}
-				},
-				orderBy: { createdAt: 'desc' }
-			}),
-			this.prismaService.follows.count({
-				where: { followerId: userId }
-			})
-		]);
+    const [following, total] = await Promise.all([
+      this.prismaService.follows.findMany({
+        where: { followerId: userId },
+        skip,
+        take: limit,
+        include: {
+          following: {
+            select: {
+              id: true,
+              username: true,
+              name: true,
+              avatarUrl: true,
+              bio: true,
+              isVerified: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prismaService.follows.count({
+        where: { followerId: userId },
+      }),
+    ]);
 
-		return {
-			following: following.map(f => f.following),
-			total,
-			page,
-			limit,
-			totalPages: Math.ceil(total / limit)
-		};
-	}
+    return {
+      following: following.map((f) => f.following),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
 
-	/**
-	 * Проверить, подписан ли текущий пользователь на другого
-	 */
-	public async isFollowing(followerId: string, followingId: string): Promise<boolean> {
-		const follow = await this.prismaService.follows.findUnique({
-			where: {
-				followerId_followingId: {
-					followerId,
-					followingId
-				}
-			}
-		});
+  /**
+   * Проверить, подписан ли текущий пользователь на другого
+   */
+  public async isFollowing(
+    followerId: string,
+    followingId: string,
+  ): Promise<boolean> {
+    const follow = await this.prismaService.follows.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId,
+          followingId,
+        },
+      },
+    });
 
-		return !!follow;
-	}
+    return !!follow;
+  }
 
-	/**
-	 * Получить статистику подписок пользователя
-	 */
-	public async getFollowStats(userId: string) {
-		const [followersCount, followingCount] = await Promise.all([
-			this.prismaService.follows.count({
-				where: { followingId: userId }
-			}),
-			this.prismaService.follows.count({
-				where: { followerId: userId }
-			})
-		]);
+  /**
+   * Получить статистику подписок пользователя
+   */
+  public async getFollowStats(userId: string) {
+    const [followersCount, followingCount] = await Promise.all([
+      this.prismaService.follows.count({
+        where: { followingId: userId },
+      }),
+      this.prismaService.follows.count({
+        where: { followerId: userId },
+      }),
+    ]);
 
-		return {
-			followersCount,
-			followingCount
-		};
-	}
+    return {
+      followersCount,
+      followingCount,
+    };
+  }
 }

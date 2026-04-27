@@ -23,8 +23,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { NoticeModule } from './notice/notice.module';
 import { GroupModule } from './room/group/group.module';
 import { ChannelModule } from './room/channel/channel.module';
-
-
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -53,7 +52,8 @@ import { ChannelModule } from './room/channel/channel.module';
     AdminModule,
     NoticeModule,
     GroupModule,
-    ChannelModule
+    ChannelModule,
+    NotificationModule
   ],
 })
 export class AppModule {}

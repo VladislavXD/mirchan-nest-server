@@ -8,42 +8,44 @@ datasource db {
 }
 
 model User {
-  id                 String      @id @default(uuid())
-  email              String      @unique
-  password           String? // Делаем опциональным для Google OAuth
-  name               String?
-  username           String?     @default("пользователь mirchan")
-  status             String?     @default("В поисках интересных тем… ")
-  avatarUrl          String?
-  avatarFrameUrl     String?
-  backgroundUrl      String?
-  usernameFrameUrl   String?
-  dateOfBirth        DateTime?
-  role               UserRole    @default(REGULAR) // "user", "admin"
-  isActive           Boolean     @default(true) // Активность аккаунта 
-  isVerified         Boolean     @default(false) @map("is_verified") // Подтвержден ли email
-  method             AuthMethod
-  isTwoFactorEnabled Boolean     @default(false) @map("is_two_factor_enabled") // Включена ли двухфакторная аутентификация
-  createdAt          DateTime    @default(now()) @map("created_at")
-  updatedAt          DateTime    @updatedAt @map("updated_at")
-  bio                String?
-  location           String?
-  lastSeen           DateTime? // Время последней активности
-  googleId           String? // Google OAuth ID
-  provider           String? // "local" | "google"
-  post               Post[]
-  likes              Like[]
-  savedPosts         Post[]      @relation("SavedPosts")
-  reposts            Repost[]
-  comments           Comment[]
-  followers          Follows[]   @relation("following")
-  following          Follows[]   @relation("follower")
-  modActions         ModAction[] @relation("ModActions")
-  bansMade           Ban[]       @relation("BansMade")
-  accounts           Account[]
-  chats              Chat[]      @relation("ChatParticipants")
-  adminChats         Chat[]      @relation("ChatAdmins")
-  sentMessages       Message[]   @relation("SentMessages")
+  id                    String         @id @default(uuid())
+  email                 String         @unique
+  password              String? // Делаем опциональным для Google OAuth
+  name                  String?
+  username              String?        @default("пользователь mirchan")
+  status                String?        @default("В поисках интересных тем… ")
+  avatarUrl             String?
+  avatarFrameUrl        String?
+  backgroundUrl         String?
+  usernameFrameUrl      String?
+  dateOfBirth           DateTime?
+  role                  UserRole       @default(REGULAR) // "user", "admin"
+  isActive              Boolean        @default(true) // Активность аккаунта 
+  isVerified            Boolean        @default(false) @map("is_verified") // Подтвержден ли email
+  method                AuthMethod
+  isTwoFactorEnabled    Boolean        @default(false) @map("is_two_factor_enabled") // Включена ли двухфакторная аутентификация
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+  bio                   String?
+  location              String?
+  lastSeen              DateTime? // Время последней активности
+  googleId              String? // Google OAuth ID
+  provider              String? // "local" | "google"
+  post                  Post[]
+  likes                 Like[]
+  savedPosts            Post[]         @relation("SavedPosts")
+  reposts               Repost[]
+  comments              Comment[]
+  followers             Follows[]      @relation("following")
+  following             Follows[]      @relation("follower")
+  modActions            ModAction[]    @relation("ModActions")
+  bansMade              Ban[]          @relation("BansMade")
+  accounts              Account[]
+  chats                 Chat[]         @relation("ChatParticipants")
+  adminChats            Chat[]         @relation("ChatAdmins")
+  sentMessages          Message[]      @relation("SentMessages")
+  receivedNotifications Notification[] @relation("ReceivedNotifications")
+  issuedNotifications   Notification[] @relation("IssuedNotifications")
 
   @@map("users")
 }
@@ -156,6 +158,8 @@ model Post {
   savedBy        User[]      @relation("SavedPosts") // Обратная связь для сохранённых постов
   repostCount    Int         @default(0) // Количество репостов
 
+  notifications Notification[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
   isEdited  Boolean  @default(false)
@@ -246,6 +250,8 @@ model Comment {
   replyTo   Comment?  @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: Cascade)
   replyToId String?
   replies   Comment[] @relation("CommentReplies")
+
+  notifications Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -472,12 +478,13 @@ model Chat {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  messages Message[]
+  messages      Message[]
+  notifications Notification[]
 
-  name         String? // Для групп и каналов
-  description  String? // Для групп и каналов
-  avatarUrl    String? // Для групп и каналов
-  isPrivate    Boolean  @default(false) // Для групп и каналов
+  name        String? // Для групп и каналов
+  description String? // Для групп и каналов
+  avatarUrl   String? // Для групп и каналов
+  isPrivate   Boolean @default(false) // Для групп и каналов
 
   participants User[] @relation("ChatParticipants")
   admins       User[] @relation("ChatAdmins") // Для групп и каналов
@@ -501,4 +508,50 @@ model Message {
 
   @@index([chatId])
   @@index([senderId])
+}
+
+model Notification {
+  id      String           @id @default(uuid())
+  type    NotificationType
+  isRead  Boolean          @default(false) @map("is_read")
+  message String?
+
+  // Кому предназначено уведомление
+  user   User   @relation("ReceivedNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  userId String @map("user_id")
+
+  // Кто совершил действие
+  issuer   User?   @relation("IssuedNotifications", fields: [issuerId], references: [id], onDelete: Cascade)
+  issuerId String? @map("issuer_id")
+
+  // Полиморфные связи (опционально)
+  post   Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId String? @map("post_id")
+
+  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  commentId String?  @map("comment_id")
+
+  chat   Chat?   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chatId String? @map("chat_id")
+  // Универсальное поле для любых дополнительных данных
+  metadata  Json?    // Хранит специфичные данные (например: { "achievementId": 123, "points": 50 })
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@unique([type, userId, issuerId, postId, commentId], name: "unique_notification")
+  @@map("notifications")
+}
+
+enum NotificationType {
+  LIKE_POST
+  LIKE_COMMENT
+  NEW_COMMENT
+  REPLY_COMMENT
+  NEW_FOLLOWER
+  NEW_MESSAGE
+  POST_MENTION
+  COMMENT_MENTION
+  SYSTEM
 }
