@@ -7,8 +7,8 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "prisma generate",
-   "start": "node dist/src/main",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+   "start": "node src/main",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start:dev": "nest start --watch",
     "postinstall": "prisma generate",
