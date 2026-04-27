@@ -268,4 +268,15 @@ export class RedisService implements OnModuleDestroy {
 		const result = await this.redis.get(key)
 		return result === 'true'
 	}
+
+	/**
+	 * Публикует сообщение в Redis Pub/Sub канал.
+	 * 
+	 * @param channel - Имя канала
+	 * @param message - Сообщение (строка или JSON)
+	 */
+	async publish(channel: string, message: string | Record<string, any>): Promise<number> {
+		const payload = typeof message === 'string' ? message : JSON.stringify(message);
+		return await this.redis.publish(channel, payload);
+	}
 }
